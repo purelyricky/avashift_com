@@ -20,8 +20,8 @@ const GatemenUpdateAvailability = async () => {
   return (
     <section className="payment-transfer">
       <HeaderBox 
-        title="Update Your Availability"
-        subtext="Please select the specific days and times thatyou are available to work"
+        title="Frissítse Elérhetőségét"
+        subtext="Kérjük, válassza ki azokat a konkrét napokat és időpontokat, amikor dolgozni tud"
       />
 
       <section className="size-full pt-5">

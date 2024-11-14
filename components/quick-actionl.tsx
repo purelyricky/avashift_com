@@ -31,8 +31,8 @@ export function QuickActionl() {
   return (
     <div className="flex flex-col gap-8 bg-gray-25 p-8 xl:py-12">
       <div className="header-box">
-        <h2 className="header-box-title">Quick Actions</h2>
-        <p className="header-box-subtext">Manage your availability and requests</p>
+        <h2 className="header-box-title">Gyors Műveletek</h2>
+        <p className="header-box-subtext">Rendelkezésre állás és kérelmek kezelése</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Button 
@@ -40,23 +40,23 @@ export function QuickActionl() {
           disabled={isLoading}
           className="text14_padding10 bg-[#191970] text-white shadow-form"
         >
-          {isLoading ? "Loading..." : "Update Availability"}
+          {isLoading ? "Betöltés..." : "Rendelkezésre Állás Frissítése"}
         </Button>
         <Dialog open={payStubsModalOpen} onOpenChange={setPayStubsModalOpen}>
           <DialogTrigger asChild>
-            <Button className="text14_padding10 bg-[#191970] text-white shadow-form">View Pay Stubs</Button>
+            <Button className="text14_padding10 bg-[#191970] text-white shadow-form">Fizetési Jegyzékek</Button>
           </DialogTrigger>
           <DialogContent className="bg-white/95 backdrop-blur-sm">
             <DialogHeader>
-              <DialogTitle className="text-20 font-semibold text-gray-900">Pay Stubs</DialogTitle>
+              <DialogTitle className="text-20 font-semibold text-gray-900">Fizetési Jegyzékek</DialogTitle>
               <DialogDescription className="text-14 text-gray-600">
-                Please contact your Admin for your Stubs.
+                Kérjük, vegye fel a kapcsolatot az adminisztrátorral a fizetési jegyzékekért.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" className="text14_padding10 text-gray-700">
-                  Close
+                  Bezárás
                 </Button>
               </DialogClose>
             </DialogFooter>
@@ -69,33 +69,33 @@ export function QuickActionl() {
               variant={timeOffStatus === 'pending' ? 'secondary' : 'default'}
               className="text14_padding10 bg-[#191970] text-white shadow-form"
             >
-              {timeOffStatus === 'active' && "Request Time Off"}
-              {timeOffStatus === 'pending' && "Pending Time Off Request"}
-              {timeOffStatus === 'inactive' && "Activate Account"}
+              {timeOffStatus === 'active' && "Szabadság Igénylése"}
+              {timeOffStatus === 'pending' && "Függőben Lévő Szabadság Kérelem"}
+              {timeOffStatus === 'inactive' && "Fiók Aktiválása"}
             </Button>
           </DialogTrigger>
           <DialogContent className="bg-white/95 backdrop-blur-sm">
             <DialogHeader>
               <DialogTitle className="text-20 font-semibold text-gray-900">
-                {timeOffStatus === 'active' && "Request Time Off"}
-                {timeOffStatus === 'inactive' && "Activate Account"}
+                {timeOffStatus === 'active' && "Szabadság Igénylése"}
+                {timeOffStatus === 'inactive' && "Fiók Aktiválása"}
               </DialogTitle>
               <DialogDescription>
                 {timeOffStatus === 'active' && (
                   <Alert variant="default" className="bg-yellow-50 border-yellow-200">
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                    <AlertTitle className="text-14 font-semibold text-yellow-800">Warning</AlertTitle>
+                    <AlertTitle className="text-14 font-semibold text-yellow-800">Figyelmeztetés</AlertTitle>
                     <AlertDescription className="text-14 text-yellow-700">
-                      Please contact your administrator to Request Time off but be aware that you won't receive any shifts until they change your status again.
+                      Kérjük, vegye fel a kapcsolatot az adminisztrátorral a szabadság igényléséhez, de vegye figyelembe, hogy nem kap több műszakot, amíg nem változtatják meg újra az állapotát.
                     </AlertDescription>
                   </Alert>
                 )}
                 {timeOffStatus === 'inactive' && (
                   <Alert className="bg-blue-50 border-blue-200">
                     <InfoIcon className="h-4 w-4 text-blue-600" />
-                    <AlertTitle className="text-14 font-semibold text-blue-800">Information</AlertTitle>
+                    <AlertTitle className="text-14 font-semibold text-blue-800">Információ</AlertTitle>
                     <AlertDescription className="text-14 text-blue-700">
-                      Requesting your account to be active makes you eligible for future upcoming shifts.
+                      A fiók aktiválásának kérelmezésével jogosulttá válik a jövőbeni műszakokra.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -104,7 +104,7 @@ export function QuickActionl() {
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" className="text14_padding10 text-gray-700">
-                  Close
+                  Bezárás
                 </Button>
               </DialogClose>
             </DialogFooter>

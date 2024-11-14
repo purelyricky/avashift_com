@@ -28,9 +28,9 @@ const GatemanDashboard = async () => {
         <header className="home-header">
           <HeaderBox 
             type="greeting"
-            title="Welcome,"
+            title="Üdvözöljük,"
             user={`${user.firstName}`}
-            subtext="Access and manage your Shifts and Attendance Records easily."
+            subtext="Könnyen hozzáférhet és kezelheti műszakjait és jelenléti nyilvántartását."
           />
 
           <TotalBalanceBoxGate gatemanStats={gatemanStats} />

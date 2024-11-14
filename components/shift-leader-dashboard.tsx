@@ -389,14 +389,14 @@ export default function ShiftLeaderDashboard({
     <div className="space-y-12 relative">
       <section className="bg-white p-6 rounded-lg shadow-sm">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900 text-center">
-          Students Expected Today
+          Mai Várható Diákok
         </h2>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Student</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>Diák</TableHead>
+              <TableHead>Státusz</TableHead>
+              <TableHead>Műveletek</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -475,7 +475,7 @@ export default function ShiftLeaderDashboard({
                         : "bg-red-100 text-red-800"
                     )}
                   >
-                    {student.clockedIn ? "Clocked In" : "Not Clocked In"}
+                    {student.clockedIn ? "Bejelentkezve" : "Nincs Bejelentkezve"}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -489,7 +489,7 @@ export default function ShiftLeaderDashboard({
                     className="bg-[#191970] text-white hover:bg-[#191970]/90"
                   >
                     <MessageSquare className="h-4 w-4 mr-2" />
-                    Add Comment
+                    Megjegyzés Hozzáadása
                   </Button>
                 </TableCell>
               </TableRow>
@@ -501,7 +501,7 @@ export default function ShiftLeaderDashboard({
       {/* Shifts Section */}
       <section className="bg-gray-100 p-6 rounded-lg shadow-sm">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900 text-center">
-          Shifts
+          Műszakok
         </h2>
         <Tabs defaultValue="upcoming" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -509,13 +509,13 @@ export default function ShiftLeaderDashboard({
               value="upcoming"
               className="data-[state=active]:bg-[#100C08] data-[state=active]:text-white"
             >
-              Upcoming
+              Következő
             </TabsTrigger>
             <TabsTrigger
               value="completed"
               className="data-[state=active]:bg-[#100C08] data-[state=active]:text-white"
             >
-              Completed
+              Befejezett
             </TabsTrigger>
           </TabsList>
 
@@ -524,9 +524,9 @@ export default function ShiftLeaderDashboard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Időpont</TableHead>
+                  <TableHead>Műveletek</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -545,7 +545,7 @@ export default function ShiftLeaderDashboard({
                           }}
                           className="bg-[#191970] text-white hover:bg-[#191970]/90"
                         >
-                          More Details
+                          Részletek
                         </Button>
                         <Button
                           variant="outline"
@@ -562,8 +562,8 @@ export default function ShiftLeaderDashboard({
                           )}
                         >
                           {shift.hasPendingCancellation
-                            ? "Cancellation Pending"
-                            : "Cancel Shift"}
+                            ? "Törlés Folyamatban"
+                            : "Műszak Törlése"}
                         </Button>
                       </div>
                     </TableCell>
@@ -577,20 +577,20 @@ export default function ShiftLeaderDashboard({
           <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
             <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
               <DialogHeader>
-                <DialogTitle>Cancel Shift</DialogTitle>
+                <DialogTitle>Műszak Törlése</DialogTitle>
               </DialogHeader>
               <div className="grid gap-4">
-                <p>Are you sure you want to cancel this shift?</p>
+                <p>Biztosan törölni szeretné ezt a műszakot?</p>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="reason" className="text-right">
-                    Reason
+                    Indok
                   </Label>
                   <Textarea
                     id="reason"
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
                     className="col-span-3"
-                    placeholder="Please provide a reason for cancellation"
+                    placeholder="Kérjük, adja meg a törlés okát"
                   />
                 </div>
               </div>
@@ -603,10 +603,10 @@ export default function ShiftLeaderDashboard({
                   {isSubmittingCancel ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Submitting...
+                      Küldés...
                     </>
                   ) : (
-                    "Submit Cancellation Request"
+                    "Törlési Kérelem Beküldése"
                   )}
                 </Button>
               </DialogFooter>
@@ -618,10 +618,10 @@ export default function ShiftLeaderDashboard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Időpont</TableHead>
+                  <TableHead>Státusz</TableHead>
+                  <TableHead>Műveletek</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -634,7 +634,7 @@ export default function ShiftLeaderDashboard({
                         variant="outline"
                         className="bg-green-100 text-green-800"
                       >
-                        Completed
+                        Befejezett
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -647,7 +647,7 @@ export default function ShiftLeaderDashboard({
                         }}
                         className="bg-[#191970] text-white hover:bg-[#191970]/90"
                       >
-                        More Details
+                        Részletek
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -661,7 +661,7 @@ export default function ShiftLeaderDashboard({
       {/* Unsaved Changes Notification */}
       {hasUnsavedChanges && (
         <div className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-md shadow-md flex items-center justify-between">
-          <span>You have unsaved changes!</span>
+          <span>Nem mentett változtatások!</span>
           <Button
             onClick={handleSaveChanges}
             disabled={isSaving}
@@ -670,7 +670,7 @@ export default function ShiftLeaderDashboard({
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              "Save Changes"
+              "Változtatások Mentése"
             )}
           </Button>
         </div>
@@ -680,7 +680,7 @@ export default function ShiftLeaderDashboard({
       {showSaveConfirmation && (
         <div className="fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-md shadow-md flex items-center">
           <CheckCircle className="h-5 w-5 mr-2" />
-          <span>Changes saved successfully!</span>
+          <span>Változtatások si</span>
         </div>
       )}
 
@@ -688,24 +688,24 @@ export default function ShiftLeaderDashboard({
       <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
         <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
           <DialogHeader>
-            <DialogTitle>Shift Details</DialogTitle>
+            <DialogTitle>Műszak Részletei</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Date</Label>
+                <Label>Dátum</Label>
                 <p className="font-medium">{selectedShift?.date}</p>
               </div>
               <div>
-                <Label>Time</Label>
+                <Label>Időpont</Label>
                 <p className="font-medium">{selectedShift?.time}</p>
               </div>
               <div>
-                <Label>Expected Students</Label>
+                <Label>Várható Diákok</Label>
                 <p className="font-medium">{selectedShift?.expectedStudents}</p>
               </div>
               <div>
-                <Label>Reported Students</Label>
+                <Label>Jelentkezett Diákok</Label>
                 <p className="font-medium">{selectedShift?.reportedStudents}</p>
               </div>
             </div>
@@ -715,7 +715,7 @@ export default function ShiftLeaderDashboard({
               onClick={() => setDetailsModalOpen(false)}
               className="bg-[#191970] text-white hover:bg-[#191970]/90"
             >
-              Close
+              Bezárás
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -725,12 +725,12 @@ export default function ShiftLeaderDashboard({
       <Dialog open={commentModalOpen} onOpenChange={setCommentModalOpen}>
         <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
           <DialogHeader>
-            <DialogTitle>Add Comment</DialogTitle>
+            <DialogTitle>Megjegyzés Hozzáadása</DialogTitle>
           </DialogHeader>
           {!commentSubmitted ? (
             <>
               <Textarea
-                placeholder="Type your comment here."
+                placeholder="Írja ide a megjegyzését."
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 disabled={isSubmittingComment}
@@ -745,10 +745,10 @@ export default function ShiftLeaderDashboard({
                   {isSubmittingComment ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Sending...
+                      Küldés...
                     </>
                   ) : (
-                    "Send Comment"
+                    "Megjegyzés Küldése"
                   )}
                 </Button>
               </DialogFooter>
@@ -757,10 +757,10 @@ export default function ShiftLeaderDashboard({
             <div className="flex flex-col items-center justify-center py-4">
               <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
               <p className="text-lg font-semibold text-center">
-                Comment Submitted!
+                Megjegyzés Elküldve!
               </p>
               <p className="text-center text-gray-600">
-                Your comment has been successfully recorded.
+                A megjegyzése sikeresen rögzítésre került.
               </p>
             </div>
           )}

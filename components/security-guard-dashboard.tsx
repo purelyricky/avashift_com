@@ -198,7 +198,7 @@ export default function SecurityGuardDashboard({
     <div className="space-y-12">
       <section className="bg-white p-6 rounded-lg shadow-sm">
         <h2 className="text-3xl font-semibold mb-4 text-gray-900 text-center">
-          Today's Shifts
+          Mai Műszakok
         </h2>
         <div className="flex justify-center mb-8">
           <div className="flex items-center space-x-4">
@@ -226,7 +226,7 @@ export default function SecurityGuardDashboard({
             {isSearching ? (
               <Loader2 className="h-6 w-6 animate-spin" />
             ) : (
-              "Verify"
+              "Ellenőrzés"
             )}
           </Button>
         </div>
@@ -234,7 +234,7 @@ export default function SecurityGuardDashboard({
         {isSearching && (
           <div className="flex items-center justify-center space-x-2">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p>Searching for student...</p>
+            <p>Diák keresése...</p>
           </div>
         )}
 
@@ -242,7 +242,7 @@ export default function SecurityGuardDashboard({
           <Dialog open={true} onOpenChange={() => setStudentFound(false)}>
             <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
               <DialogHeader>
-                <DialogTitle>Student Information</DialogTitle>
+                <DialogTitle>Diák Információ</DialogTitle>
               </DialogHeader>
               <div className="flex items-center space-x-4">
                 <InitialsAvatar name={currentStudent.name} />
@@ -255,10 +255,10 @@ export default function SecurityGuardDashboard({
               </div>
               <div className="mt-4">
                 <p>
-                  <strong>Project:</strong> {currentStudent.project}
+                  <strong>Projekt:</strong> {currentStudent.project}
                 </p>
                 <p>
-                  <strong>Time:</strong> {currentStudent.time}
+                  <strong>Idő:</strong> {currentStudent.time}
                 </p>
               </div>
               <DialogFooter>
@@ -266,7 +266,7 @@ export default function SecurityGuardDashboard({
                   onClick={handleMarkAsPresent}
                   className="bg-[#191970] text-white hover:bg-[#191970]/90"
                 >
-                  Mark as Present
+                  Jelenlét Rögzítése
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -276,9 +276,9 @@ export default function SecurityGuardDashboard({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Student</TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Time</TableHead>
+              <TableHead>Diák</TableHead>
+              <TableHead>Projekt</TableHead>
+              <TableHead>Idő</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -300,7 +300,7 @@ export default function SecurityGuardDashboard({
 
       <section className="bg-gray-100 p-6 rounded-lg shadow-sm">
         <h2 className="text-2xl font-semibold mb-4 text-gray-900 text-center">
-          Shifts
+          Műszakok
         </h2>
         <Tabs defaultValue="upcoming" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -308,22 +308,22 @@ export default function SecurityGuardDashboard({
               value="upcoming"
               className="data-[state=active]:bg-[#100C08] data-[state=active]:text-white"
             >
-              Upcoming
+              Következő
             </TabsTrigger>
             <TabsTrigger
               value="completed"
               className="data-[state=active]:bg-[#100C08] data-[state=active]:text-white"
             >
-              Completed
+              Befejezett
             </TabsTrigger>
           </TabsList>
           <TabsContent value="upcoming">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Idő</TableHead>
+                  <TableHead>Műveletek</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -339,7 +339,7 @@ export default function SecurityGuardDashboard({
                           onClick={() => handleViewDetails(shift.id)}
                           className="bg-[#191970] text-white hover:bg-[#191970]/90"
                         >
-                          More Details
+                          Részletek
                         </Button>
                         <Button
                           variant="outline"
@@ -352,8 +352,8 @@ export default function SecurityGuardDashboard({
                           className="bg-[#191970] text-white hover:bg-[#191970]/90"
                         >
                           {shift.status === "pendingCancel"
-                            ? "Pending Cancel"
-                            : "Cancel Shift"}
+                            ? "Törlés Folyamatban"
+                            : "Műszak Törlése"}
                         </Button>
                       </div>
                     </TableCell>
@@ -366,10 +366,10 @@ export default function SecurityGuardDashboard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Idő</TableHead>
+                  <TableHead>Státusz</TableHead>
+                  <TableHead>Műveletek</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -382,7 +382,7 @@ export default function SecurityGuardDashboard({
                         variant="outline"
                         className="bg-green-100 text-green-800"
                       >
-                        Completed
+                        Befejezett
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -392,7 +392,7 @@ export default function SecurityGuardDashboard({
                         onClick={() => handleViewDetails(shift.id)}
                         className="bg-[#191970] text-white hover:bg-[#191970]/90"
                       >
-                        More Details
+                        Részletek
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -406,24 +406,24 @@ export default function SecurityGuardDashboard({
       <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
         <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
           <DialogHeader>
-            <DialogTitle>Shift Details</DialogTitle>
+            <DialogTitle>Műszak Részletei</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Date</Label>
+                <Label>Dátum</Label>
                 <p className="font-medium">{selectedShift?.date}</p>
               </div>
               <div>
-                <Label>Time</Label>
+                <Label>Idő</Label>
                 <p className="font-medium">{selectedShift?.time}</p>
               </div>
               <div>
-                <Label>Expected Students</Label>
+                <Label>Várt Diákok</Label>
                 <p className="font-medium">{selectedShift?.expectedStudents}</p>
               </div>
               <div>
-                <Label>Reported Students</Label>
+                <Label>Megjelent Diákok</Label>
                 <p className="font-medium">{selectedShift?.reportedStudents}</p>
               </div>
             </div>
@@ -433,7 +433,7 @@ export default function SecurityGuardDashboard({
               onClick={() => setDetailsModalOpen(false)}
               className="bg-[#191970] text-white hover:bg-[#191970]/90"
             >
-              Close
+              Bezárás
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -442,13 +442,13 @@ export default function SecurityGuardDashboard({
       <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
         <DialogContent style={{ backgroundColor: "#FFFFFF" }}>
           <DialogHeader>
-            <DialogTitle>Cancel Shift</DialogTitle>
+            <DialogTitle>Műszak Törlése</DialogTitle>
           </DialogHeader>
-          <p>Are you sure you want to cancel this shift?</p>
+          <p>Biztosan törölni szeretné ezt a műszakot?</p>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="reason" className="text-right">
-                Reason
+                Indok
               </Label>
               <Input
                 id="reason"
@@ -463,7 +463,7 @@ export default function SecurityGuardDashboard({
               onClick={() => handleCancelShift(selectedShift?.id)}
               className="bg-[#191970] text-white hover:bg-[#191970]/90"
             >
-              Confirm Cancellation
+              Törlés Megerősítése
             </Button>
           </DialogFooter>
         </DialogContent>

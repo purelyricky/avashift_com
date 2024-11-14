@@ -26,9 +26,9 @@ const LeaderDashboard = async () => {
         <header className="home-header">
           <HeaderBox 
             type="greeting"
-            title="Welcome,"
+            title="Üdvözöljük,"
             user={`${user.firstName}`}
-            subtext="Access and manage your Shifts and Attendance Records easily."
+            subtext="Könnyen hozzáférhet és kezelheti a műszakjait és a jelenléti nyilvántartását."
           />
           <TotalBalanceBoxLeader leaderStats={leaderStats} />
         </header>

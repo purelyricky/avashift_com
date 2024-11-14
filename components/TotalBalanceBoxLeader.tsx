@@ -9,12 +9,12 @@ const TotalBalanceBoxLeader = ({ leaderStats }: { leaderStats: LeaderStats }) =>
     totalStudents: leaderStats.totalStudents,
     studentSegments: [
       {
-        label: 'Clocked In',
+        label: 'Bejelentkezve',
         count: leaderStats.clockedInStudents,
         color: '#2265d8'
       },
       {
-        label: 'Not Clocked In',
+        label: 'Nincs bejelentkezve',
         count: leaderStats.notClockedInStudents,
         color: '#0747b6'
       }
@@ -31,11 +31,11 @@ const TotalBalanceBoxLeader = ({ leaderStats }: { leaderStats: LeaderStats }) =>
 
           <div className="flex flex-col gap-6">
             <h2 className="header-2">
-              Total Students: {leaderStats.totalStudents}
+              Összes diák: {leaderStats.totalStudents}
             </h2>
             <div className="flex flex-col gap-2">
               <p className="total-balance-label">
-                Currently Clocked In
+                Jelenleg bejelentkezve
               </p>
 
               <div className="total-balance-amount flex-center gap-2">
@@ -50,17 +50,17 @@ const TotalBalanceBoxLeader = ({ leaderStats }: { leaderStats: LeaderStats }) =>
         <StatCardLeader
           type="attendance"
           value={leaderStats.attendanceRate}
-          label="Attendance Rate"
+          label="Részvételi arány"
         />
         <StatCardLeader
           type="ratings"
           value={(leaderStats.averageRatings.punctuality + leaderStats.averageRatings.overall) / 2}
-          label="Average Ratings"
+          label="Átlagos értékelés"
         />
         <StatCardLeader
           type="comments"
           value={leaderStats.totalComments}
-          label="Total Comments"
+          label="Összes hozzászólás"
         />
       </div>
 
