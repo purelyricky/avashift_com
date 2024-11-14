@@ -23,9 +23,9 @@ const GatemanReport = async () => {
     <section className="home min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="home-content p-6">
         <header className="home-header mb-12">
-        <HeaderBox 
-            title="Shift Reports"
-            subtext="See your shift reports accurately across all your projects."
+          <HeaderBox 
+            title="Műszak Jelentések"
+            subtext="Tekintse meg műszakjelentéseit pontosan az összes projektjében."
           />
         </header>
 
@@ -41,17 +41,17 @@ const GatemanReport = async () => {
                 </div>
 
                 <h2 className="text-2xl font-bold text-gray-800 mt-4">
-                  🚧 Under Construction 🚧
+                  🚧 Fejlesztés Alatt 🚧
                 </h2>
 
                 <p className="text-center text-gray-600 max-w-md">
-                  We're working hard to build something amazing! This feature will be available soon.
+                  Keményen dolgozunk valami csodálatosan! Ez a funkció hamarosan elérhető lesz.
                 </p>
 
                 <div className="flex items-center justify-center p-4 bg-amber-50 rounded-lg border border-amber-200 mt-4">
                   <AlertTriangle className="h-5 w-5 text-amber-500 mr-2" />
                   <p className="text-amber-700 font-medium">
-                    Expected completion: Coming Soon
+                    Várható befejezés: Hamarosan
                   </p>
                 </div>
 
@@ -67,7 +67,7 @@ const GatemanReport = async () => {
                 </div>
 
                 <p className="text-sm text-gray-500 mt-4">
-                  Check back later for updates!
+                  Nézzen vissza később a frissítésekért!
                 </p>
               </div>
             </CardContent>

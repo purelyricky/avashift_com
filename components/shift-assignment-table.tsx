@@ -51,7 +51,7 @@ import {
   Hand,
   Dot,
   RectangleEllipsis,
-  Check,
+  Ban,
 } from "lucide-react";
 import StarRating from "@/components/StarRating";
 import { ErrorDialog } from "@/components/ErrorDialog";
@@ -67,12 +67,9 @@ import {
   type OptionalDateRange,
   getSelectedDaysStats,
   SelectedDaysStats,
-  type RequestedDayStatus,
-  type UserAvailabilityWithStatus,
+  markNoShiftDates,
+  getAvailableDatesForDay,
 } from "@/lib/actions/shift-assignments.actions";
-import { cn } from "@/lib/utils";
-
-
 
 // Constants
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -153,7 +150,7 @@ export interface ProgressStats {
 interface ShiftAssignmentTableProps {
   projectId: string;
   initialStats: ShiftAssignmentStats;
-  initialAvailabilities: UserAvailabilityWithStatus[];
+  initialAvailabilities: UserAvailability[];
 }
 
 const InitialsAvatar = ({ name }: { name: string }) => {
@@ -188,24 +185,6 @@ const InitialsAvatar = ({ name }: { name: string }) => {
   );
 };
 
-// Add this component for the status badge
-const RequestedDayBadge = ({ day, hasShift, isBooked }: RequestedDayStatus) => {
-  if (!hasShift) return <span>{day}</span>;
-  
-  return (
-    <Badge 
-      className={cn(
-        "ml-2",
-        hasShift ? "bg-green-100 text-green-800" : "",
-        isBooked ? "flex items-center gap-1" : ""
-      )}
-    >
-      {day}
-      {isBooked && <Check className="h-3 w-3" />}
-    </Badge>
-  );
-};
-
 export default function ShiftAssignmentTable({
   projectId,
   initialStats,
@@ -213,10 +192,10 @@ export default function ShiftAssignmentTable({
 }: ShiftAssignmentTableProps) {
   // States
   const [stats, setStats] = useState<ShiftAssignmentStats>(initialStats);
-  const [workers, setWorkers] = useState<UserAvailabilityWithStatus[]>(
+  const [workers, setWorkers] = useState<UserAvailability[]>(
     initialAvailabilities
   );
-  const [filteredWorkers, setFilteredWorkers] = useState<UserAvailabilityWithStatus[]>(
+  const [filteredWorkers, setFilteredWorkers] = useState<UserAvailability[]>(
     initialAvailabilities
   );
   const [searchTerm, setSearchTerm] = useState("");
@@ -266,8 +245,12 @@ export default function ShiftAssignmentTable({
     return fullDay.substring(0, 3);
   };
 
+  const [loadingNoShifts, setLoadingNoShifts] = useState<
+    Record<string, boolean>
+  >({});
+
   // Filter functions
-  const applyFilters = (items: UserAvailabilityWithStatus[]) => {
+  const applyFilters = (items: UserAvailability[]) => {
     let filteredItems = [...items];
 
     // Apply punctuality filters
@@ -290,10 +273,10 @@ export default function ShiftAssignmentTable({
       filteredItems = filteredItems.filter((item) => {
         const relevantDays =
           filters.requestedDays.type === "day"
-            ? item.requestedDays.day.map(d => d.day)
+            ? item.requestedDays.day
             : filters.requestedDays.type === "night"
-            ? item.requestedDays.night.map(d => d.day)
-            : [...item.requestedDays.day, ...item.requestedDays.night].map(d => d.day);
+            ? item.requestedDays.night
+            : [...item.requestedDays.day, ...item.requestedDays.night];
         return filters.requestedDays.days.some((day) =>
           relevantDays.includes(day)
         );
@@ -364,36 +347,40 @@ export default function ShiftAssignmentTable({
   const handleApproveShift = async (userId: string) => {
     const shiftId = selectedShifts[userId];
     if (!shiftId) return;
-  
-    setIsLoadingAssignment(true);
+
+    setLoadingAssignments((prev) => ({ ...prev, [userId]: true }));
     try {
       // Find the worker data
-      const workerData = workers.find(w => w.userId === userId);
+      const workerData = workers.find((w) => w.userId === userId);
       if (!workerData) {
         setErrorMessage("Worker data not found");
         setErrorDialogOpen(true);
         return;
       }
-  
-      // Pass the worker data to createShiftAssignment
-      const result = await createShiftAssignment(projectId, userId, shiftId, workerData);
-  
+
+      const result = await createShiftAssignment(
+        projectId,
+        userId,
+        shiftId,
+        workerData
+      );
+
       if (!result.success) {
         setErrorMessage(result.error || "Failed to create assignment");
         setErrorDialogOpen(true);
         return;
       }
-  
+
       // Refresh data after successful assignment
       const [statsData, availabilityData] = await Promise.all([
         getShiftAssignmentStats(projectId, dateRange),
         getUserAvailabilities(projectId, dateRange),
       ]);
-  
+
       setStats(statsData);
       setWorkers(availabilityData);
       setFilteredWorkers(availabilityData);
-  
+
       // Clear the selection
       setSelectedShifts((prev) => {
         const newState = { ...prev };
@@ -405,17 +392,8 @@ export default function ShiftAssignmentTable({
       setErrorMessage("An unexpected error occurred");
       setErrorDialogOpen(true);
     } finally {
-      setIsLoadingAssignment(false);
+      setLoadingAssignments((prev) => ({ ...prev, [userId]: false }));
     }
-  };
-
-  const handleRejectShift = (userId: string) => {
-    // Clear the selection
-    setSelectedShifts((prev) => {
-      const newState = { ...prev };
-      delete newState[userId];
-      return newState;
-    });
   };
 
   const getProgressBarColor = (score: number) => {
@@ -480,7 +458,9 @@ export default function ShiftAssignmentTable({
   // Add these state declarations to your existing states
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [isLoadingAssignment, setIsLoadingAssignment] = useState(false);
+  const [loadingAssignments, setLoadingAssignments] = useState<
+    Record<string, boolean>
+  >({});
 
   // Update the handleDateRangeSelect function
   const handleDateRangeSelect = async (range: OptionalDateRange) => {
@@ -517,6 +497,61 @@ export default function ShiftAssignmentTable({
       console.error("Error assigning shift:", error);
     }
   };
+
+  //================================
+
+  // Add new handler for marking no-shift dates
+  const handleMarkNoShift = async (userId: string) => {
+    const worker = workers.find((w) => w.userId === userId);
+    if (!worker || !dateRange.from || !dateRange.to) return;
+
+    setLoadingNoShifts((prev) => ({ ...prev, [userId]: true }));
+    try {
+      // Use Promise.all to wait for all date calculations
+      const dayDatesPromises = worker.requestedDays.day.map((day) =>
+        getAvailableDatesForDay(day, dateRange.from!, dateRange.to!, "day")
+      );
+
+      const nightDatesPromises = worker.requestedDays.night.map((day) =>
+        getAvailableDatesForDay(day, dateRange.from!, dateRange.to!, "night")
+      );
+
+      // Wait for all promises to resolve
+      const [dayDates, nightDates] = await Promise.all([
+        Promise.all(dayDatesPromises),
+        Promise.all(nightDatesPromises),
+      ]);
+
+      // Flatten the arrays of dates
+      const availableDates = [...dayDates.flat(), ...nightDates.flat()];
+
+      const result = await markNoShiftDates(projectId, userId, availableDates);
+
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to mark no-shift dates");
+        setErrorDialogOpen(true);
+        return;
+      }
+
+      // Refresh the data
+      const [statsData, availabilityData] = await Promise.all([
+        getShiftAssignmentStats(projectId, dateRange),
+        getUserAvailabilities(projectId, dateRange),
+      ]);
+
+      setStats(statsData);
+      setWorkers(availabilityData);
+      setFilteredWorkers(availabilityData);
+    } catch (error) {
+      console.error("Error marking no-shift dates:", error);
+      setErrorMessage("An unexpected error occurred");
+      setErrorDialogOpen(true);
+    } finally {
+      setLoadingNoShifts((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  //================================
 
   const handleExportData = async () => {
     try {
@@ -568,18 +603,24 @@ export default function ShiftAssignmentTable({
   );
 
   // Add state for selected days stats
-const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
-    totalRequests: 0,
-    assignedCount: { day: 0, night: 0 },
-    demand: { day: 0, night: 0 },
-  });
-  
+  const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>(
+    {
+      totalRequests: 0,
+      assignedCount: { day: 0, night: 0 },
+      demand: { day: 0, night: 0 },
+    }
+  );
+
   // Update useEffect to fetch selected days stats when days selection changes
   useEffect(() => {
     const fetchSelectedDaysStats = async () => {
       if (selectedDays.length > 0) {
         try {
-          const newStats = await getSelectedDaysStats(projectId, selectedDays, dateRange);
+          const newStats = await getSelectedDaysStats(
+            projectId,
+            selectedDays,
+            dateRange
+          );
           setSelectedDaysStats(newStats);
         } catch (error) {
           console.error("Error fetching selected days stats:", error);
@@ -594,16 +635,16 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
         });
       }
     };
-  
+
     fetchSelectedDaysStats();
   }, [selectedDays, dateRange, projectId]);
-  
+
   // Update the progress calculations
   const selectedDayStats = calculateProgressStats(
     selectedDaysStats.assignedCount.day,
     selectedDaysStats.demand.day
   );
-  
+
   const selectedNightStats = calculateProgressStats(
     selectedDaysStats.assignedCount.night,
     selectedDaysStats.demand.night
@@ -685,11 +726,7 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
               }}
             />
           </div>
-          <Button
-            type="submit"
-            size="sm"
-            className="bg-[#1B1B1B] text-white"
-          >
+          <Button type="submit" size="sm" className="bg-[#1B1B1B] text-white">
             Search
           </Button>
         </form>
@@ -826,11 +863,13 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
             style={{ color: COLORS.text.tertiary }}
           >
             <span>
-              {selectedNightStats.assigned} / {selectedNightStats.total} assigned
+              {selectedNightStats.assigned} / {selectedNightStats.total}{" "}
+              assigned
             </span>
             {selectedNightStats.isOver && (
               <span style={{ color: COLORS.progress.over }}>
-                (+{selectedNightStats.assigned - selectedNightStats.total} extra)
+                (+{selectedNightStats.assigned - selectedNightStats.total}{" "}
+                extra)
               </span>
             )}
           </div>
@@ -935,7 +974,7 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                           <SelectTrigger>
                             <SelectValue placeholder="Select shift type" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent style={{ backgroundColor: "#FFFFFF" }}>
                             <SelectItem value="all">All Shifts</SelectItem>
                             <SelectItem value="day">Day Shifts</SelectItem>
                             <SelectItem value="night">Night Shifts</SelectItem>
@@ -988,7 +1027,7 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                           <SelectTrigger>
                             <SelectValue placeholder="Select shift type" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent style={{ backgroundColor: "#FFFFFF" }}>
                             <SelectItem value="all">All Shifts</SelectItem>
                             <SelectItem value="day">Day Shifts</SelectItem>
                             <SelectItem value="night">Night Shifts</SelectItem>
@@ -1063,15 +1102,31 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                 <StarRating value={worker.rating} />
               </TableCell>
               <TableCell>
-                <div className="flex flex-wrap gap-2">
-                  {worker.requestedDays.day.map((dayStatus: RequestedDayStatus) => (
-                    <RequestedDayBadge 
-                      key={dayStatus.day} 
-                      day={dayStatus.day}
-                      hasShift={dayStatus.hasShift}
-                      isBooked={dayStatus.isBooked}
-                    />
-                  ))}
+                <div className="space-y-1">
+                  {/* Day shifts */}
+                  <div className="flex flex-wrap gap-2">
+                    {worker.requestedDays.day.map((day) => (
+                      <span
+                        key={`${day}-day`}
+                        className="flex items-center gap-1 text-sm"
+                      >
+                        {day}
+                        <Sun className="h-4 w-4 text-yellow-500" />
+                      </span>
+                    ))}
+                  </div>
+                  {/* Night shifts */}
+                  <div className="flex flex-wrap gap-2">
+                    {worker.requestedDays.night.map((day) => (
+                      <span
+                        key={`${day}-night`}
+                        className="flex items-center gap-1 text-sm"
+                      >
+                        {day}
+                        <Moon className="h-4 w-4 text-blue-500" />
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </TableCell>
               <TableCell>
@@ -1107,7 +1162,7 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Select shift" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent style={{ backgroundColor: "#FFFFFF" }}>
                     {!worker.availableShifts ||
                     worker.availableShifts.length === 0 ? (
                       <SelectItem value="no-shifts" disabled>
@@ -1145,11 +1200,12 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                     size="sm"
                     onClick={() => handleApproveShift(worker.userId)}
                     disabled={
-                      !selectedShifts[worker.userId] || isLoadingAssignment
+                      !selectedShifts[worker.userId] ||
+                      loadingAssignments[worker.userId]
                     }
                     className="bg-green-500 hover:bg-green-600 text-white"
                   >
-                    {isLoadingAssignment ? (
+                    {loadingAssignments[worker.userId] ? (
                       <span className="flex items-center">
                         <span className="animate-spin mr-2">⏳</span>
                         Processing...
@@ -1158,6 +1214,26 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
                       <>
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Approve
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleMarkNoShift(worker.userId)}
+                    disabled={loadingNoShifts[worker.userId]}
+                    className="bg-red-500 hover:bg-red-600 text-white"
+                  >
+                    {loadingNoShifts[worker.userId] ? (
+                      <span className="flex items-center">
+                        <span className="animate-spin mr-2">⏳</span>
+                        Processing...
+                      </span>
+                    ) : (
+                      <>
+                        <Ban className="h-4 w-4 mr-2" />
+                        No Shift
                       </>
                     )}
                   </Button>
@@ -1201,6 +1277,7 @@ const [selectedDaysStats, setSelectedDaysStats] = useState<SelectedDaysStats>({
         isOpen={errorDialogOpen}
         onClose={() => setErrorDialogOpen(false)}
         error={errorMessage}
+        style={{ backgroundColor: "#FFFFFF" }}
       />
     </div>
   );

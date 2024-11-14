@@ -3,7 +3,8 @@
 "use server";
 
 import { ID, Query, Models } from "node-appwrite";
-import { sendProjectAssignmentEmail } from '@/lib/emails';
+import { sendProjectAssignmentEmail } from "@/lib/emails";
+import { startOfWeek, endOfWeek, addDays, subDays } from "date-fns";
 import { createAdminClient } from "@/lib/actions/appwrite";
 import {
   format,
@@ -44,8 +45,12 @@ interface OptionalDateRange {
   from?: Date;
   to?: Date;
 }
-//===============================================
 
+interface NoShiftMarkingResult {
+  success: boolean;
+  error?: string;
+}
+//===============================================
 
 // Add new interfaces for the return types
 interface AvailabilityDate {
@@ -79,34 +84,169 @@ function isDateInRange(date: Date, start: Date, end: Date): boolean {
   );
 }
 
-
-
 // Helper function to normalize day names for comparison
-function normalizeDayName(day?: string): string {
-  if (!day) return '';
-  
-  // First, convert to lowercase
-  const lowercaseDay = day.toLowerCase();
-  
-  // Map of possible day variations to standardized format
-  const dayMap: Record<string, string> = {
-    'mon': 'Mon',
-    'monday': 'Mon',
-    'tue': 'Tue',
-    'tuesday': 'Tue',
-    'wed': 'Wed',
-    'wednesday': 'Wed',
-    'thu': 'Thu',
-    'thursday': 'Thu',
-    'fri': 'Fri',
-    'friday': 'Fri',
-    'sat': 'Sat',
-    'saturday': 'Sat',
-    'sun': 'Sun',
-    'sunday': 'Sun'
-  };
+function normalizeDayName(day: string): string {
+  return (
+    day.toLowerCase().charAt(0).toUpperCase() + day.toLowerCase().slice(1, 3)
+  );
+}
 
-  return dayMap[lowercaseDay] || day.charAt(0).toUpperCase() + day.slice(1, 3);
+// Helper function to get available dates for a specific day within a date range
+export async function getAvailableDatesForDay(
+  dayOfWeek: string,
+  startDate: Date,
+  endDate: Date,
+  timeType: "day" | "night"
+): Promise<string[]> {
+  const dates: string[] = [];
+  let currentDate = new Date(startDate);
+
+  while (currentDate <= endDate) {
+    if (format(currentDate, "EEE") === dayOfWeek) {
+      dates.push(format(currentDate, "yyyy-MM-dd"));
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dates;
+}
+
+// Helper function to get default date range (current week)
+function getDefaultDateRange(): DateRange {
+  const now = new Date();
+  return {
+    from: startOfWeek(now, { weekStartsOn: 1 }), // Start from Monday
+    to: endOfWeek(now, { weekStartsOn: 1 }), // End on Sunday
+  };
+}
+
+// New function to mark no-shift dates
+export async function markNoShiftDates(
+  projectId: string,
+  studentId: string,
+  dates: string[]
+): Promise<NoShiftMarkingResult> {
+  const { database } = await createAdminClient();
+
+  try {
+    // Get project member ID for the student
+    const projectMember = await database.listDocuments<ProjectMemberDocument>(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
+      [
+        Query.equal("projectId", [projectId]),
+        Query.equal("userId", [studentId]),
+        Query.equal("status", ["active"]),
+      ]
+    );
+
+    if (projectMember.documents.length === 0) {
+      return {
+        success: false,
+        error: "Student is not an active member of this project",
+      };
+    }
+
+    // Get user's availability records
+    const userAvailability =
+      await database.listDocuments<UserAvailabilityDocument>(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
+        [
+          Query.equal("userId", [studentId]),
+          Query.equal("status", ["active"]),
+          Query.equal("age", ["new"]),
+        ]
+      );
+
+    // Create batch of no-shift date records
+    const noShiftRecords = [];
+    const now = new Date().toISOString();
+
+    for (const date of dates) {
+      // Find matching availability record for this date
+      const dateObj = new Date(date);
+      const dayOfWeek = format(dateObj, "EEEE"); // Get full day name
+
+      // Create records for both day and night if available
+      for (const avail of userAvailability.documents) {
+        if (avail.dayOfWeek === dayOfWeek) {
+          const noShiftDateId = ID.unique();
+          noShiftRecords.push({
+            noShiftDateId,
+            projectId,
+            studentId,
+            membershipId: projectMember.documents[0].memberId,
+            date,
+            dayOfWeek,
+            timeType: avail.timeType,
+            createdBy: studentId, // Using studentId as logged-in user ID
+            createdAt: now,
+          });
+        }
+      }
+    }
+
+    // Create all no-shift date records
+    await Promise.all(
+      noShiftRecords.map((record) =>
+        database.createDocument(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_NO_SHIFT_DATES_COLLECTION_ID!,
+          record.noShiftDateId,
+          record
+        )
+      )
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error marking no-shift dates:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to mark no-shift dates",
+    };
+  }
+}
+
+// Add helper function to get no-shift dates with buffer
+export async function getNoShiftDatesInRange(
+  studentId: string,
+  dateRange: OptionalDateRange,
+  createdBy: string
+): Promise<string[]> {
+  const { database } = await createAdminClient();
+
+  try {
+    // Use current week if no date range provided
+    const effectiveRange = dateRange?.from && dateRange?.to
+      ? { from: dateRange.from, to: dateRange.to }
+      : getDefaultDateRange();
+
+    // Now we know effectiveRange has both from and to as Dates
+    const bufferStart = subDays(effectiveRange.from, 2);
+    const bufferEnd = addDays(effectiveRange.to, 2);
+
+    // Query no-shift dates
+    const noShiftDates = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_NO_SHIFT_DATES_COLLECTION_ID!,
+      [
+        Query.equal("studentId", [studentId]),
+        Query.equal("createdBy", [createdBy]),
+        Query.greaterThanEqual("createdAt", bufferStart.toISOString()),
+        Query.lessThanEqual("createdAt", bufferEnd.toISOString()),
+      ]
+    );
+
+    return Array.from(new Set(noShiftDates.documents.map((doc) => doc.date)));
+  } catch (error) {
+    console.error("Error getting no-shift dates:", error);
+    return [];
+  }
 }
 
 // Add new interface for assignment validation result
@@ -144,15 +284,16 @@ export async function getAvailableShiftDays(
 
   try {
     // 1. Get user's availability
-    const userAvailability = await database.listDocuments<UserAvailabilityDocument>(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
-      [
-        Query.equal("userId", [userId]),
-        Query.equal("status", ["active"]),
-        Query.equal("age", ["new"]),
-      ]
-    );
+    const userAvailability =
+      await database.listDocuments<UserAvailabilityDocument>(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
+        [
+          Query.equal("userId", [userId]),
+          Query.equal("status", ["active"]),
+          Query.equal("age", ["new"]),
+        ]
+      );
 
     // 2. Get shifts for the project within date range
     let shiftQueries = [
@@ -199,7 +340,7 @@ export async function getAvailableShiftDays(
           const shiftDate = new Date(shift.date);
           const availFromDate = new Date(avail.fromDate);
           const availToDate = new Date(avail.toDate);
-          
+
           // Convert both to lowercase for comparison
           const shiftDay = shift.dayOfWeek.toLowerCase();
           const availDay = avail.dayOfWeek.toLowerCase();
@@ -227,7 +368,6 @@ export async function getAvailableShiftDays(
 
     console.log("Available shift days:", availableShifts);
     return availableShifts;
-
   } catch (error) {
     console.error("Error getting available shift days:", error);
     return [];
@@ -409,7 +549,6 @@ interface StudentDocument extends Models.Document {
   lastName: string;
   punctualityScore: number;
   rating: number;
-  email: string;
 }
 
 interface ShiftAssignmentDocument extends Models.Document {
@@ -418,6 +557,7 @@ interface ShiftAssignmentDocument extends Models.Document {
   shiftId: string;
   studentId: string;
   status: "pending" | "assigned" | "confirmed" | "completed" | "cancelled";
+  noshiftDates?: string[];
 }
 
 // Response interfaces (same as before)
@@ -490,6 +630,11 @@ export async function getShiftAssignmentStats(
   const { database } = await createAdminClient();
 
   try {
+    // Use current week if no date range provided and ensure proper typing
+    const effectiveRange: DateRange = dateRange?.from && dateRange?.to
+      ? { from: dateRange.from, to: dateRange.to }
+      : getDefaultDateRange();
+
     // Get project members (students)
     const members = await database.listDocuments<ProjectMemberDocument>(
       process.env.APPWRITE_DATABASE_ID!,
@@ -501,18 +646,13 @@ export async function getShiftAssignmentStats(
       ]
     );
 
-    // Get shifts within date range
-    let shiftQueries = [
+    // Get shifts within effective range
+    const shiftQueries = [
       Query.equal("projectId", [projectId]),
       Query.equal("status", ["published", "inProgress"]),
+      Query.greaterThanEqual("date", effectiveRange.from.toISOString()),
+      Query.lessThanEqual("date", effectiveRange.to.toISOString())
     ];
-
-    if (dateRange) {
-      shiftQueries.push(
-        Query.greaterThanEqual("date", dateRange.from!.toISOString()),
-        Query.lessThanEqual("date", dateRange.to!.toISOString())
-      );
-    }
 
     const shifts = await database.listDocuments<ShiftDocument>(
       process.env.APPWRITE_DATABASE_ID!,
@@ -520,6 +660,7 @@ export async function getShiftAssignmentStats(
       shiftQueries
     );
 
+    // Calculate stats
     // Calculate stats
     const stats = shifts.documents.reduce(
       (acc, shift) => {
@@ -550,77 +691,20 @@ export async function getShiftAssignmentStats(
   }
 }
 
-// Add this helper function at the top
-function isDateInFuture(date: Date): boolean {
-  return startOfDay(date) >= startOfDay(new Date());
-}
-
-// Add this helper function to check if date range includes future dates
-function dateRangeIncludesFuture(range?: OptionalDateRange): boolean {
-  if (!range?.to) return true; // Default to true if no range specified
-  return isDateInFuture(range.to);
-}
-
-// Add this helper to get current week range
-function getCurrentWeekRange(): OptionalDateRange {
-  const today = new Date();
-  const start = startOfDay(today);
-  const end = endOfDay(new Date(today.setDate(today.getDate() + 6)));
-  return { from: start, to: end };
-}
-
-// Add these interfaces at the top with your other interfaces
-export interface RequestedDayStatus {
-  day: string;
-  hasShift: boolean;
-  isBooked: boolean;
-}
-
-export interface UserAvailabilityWithStatus {
-  userId: string;
-  name: string;
-  punctualityScore: number;
-  rating: number;
-  requestedDays: {
-    day: RequestedDayStatus[];
-    night: RequestedDayStatus[];
-  };
-  bookedDays: {
-    day: string[];
-    night: string[];
-  };
-  availableShifts: ShiftDay[];
-}
-
-// Modified getUserAvailabilities function
+// Modified getUserAvailabilities function to ensure consistent data formatting
 export async function getUserAvailabilities(
   projectId: string,
   dateRange?: OptionalDateRange
-): Promise<UserAvailabilityWithStatus[]> {
+): Promise<UserAvailability[]> {
   const { database } = await createAdminClient();
 
   try {
-    const effectiveDateRange = dateRange || getCurrentWeekRange();
-    const includesFuture = dateRangeIncludesFuture(effectiveDateRange);
-    
-    console.log("Date range:", effectiveDateRange);
-    console.log("Includes future:", includesFuture);
+    console.log("Fetching availabilities with range:", dateRange);
 
-    // First get project shifts to get their IDs
-    const projectShifts = await database.listDocuments<ShiftDocument>(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-      [
-        Query.equal("projectId", [projectId]),
-        Query.equal("status", ["published", "inProgress"]),
-        Query.greaterThanEqual("date", effectiveDateRange.from!.toISOString()),
-        Query.lessThanEqual("date", effectiveDateRange.to!.toISOString())
-      ]
-    );
-
-    // Get the shift IDs for this project
-    const projectShiftIds = projectShifts.documents.map(shift => shift.shiftId);
-    console.log("Project shifts found:", projectShifts.documents.length);
+    // Use current week if no date range provided
+    const effectiveRange: DateRange = dateRange?.from && dateRange?.to
+      ? { from: dateRange.from, to: dateRange.to }
+      : getDefaultDateRange();
 
     // Get active project members
     const members = await database.listDocuments<ProjectMemberDocument>(
@@ -633,182 +717,205 @@ export async function getUserAvailabilities(
       ]
     );
 
-    console.log("Active members found:", members.documents.length);
+    if (members.documents.length === 0) return [];
 
-    const availabilities: UserAvailabilityWithStatus[] = [];
+    const availabilities = [];
 
     for (const member of members.documents) {
-      try {
-        // Get project-specific assignments using shift IDs
-        const projectAssignments = await database.listDocuments<ShiftAssignmentDocument>(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-          [
-            Query.equal("studentId", [member.userId]),
-            Query.equal("status", ["assigned", "confirmed"]),
-            Query.equal("shiftId", projectShiftIds) // Use shift IDs to filter project assignments
-          ]
-        );
+      // Get student details
+      const studentDetails = await database.listDocuments<StudentDocument>(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+        [Query.equal("userId", [member.userId])]
+      );
 
-        // Get all assignments (for checking conflicts)
-        const allAssignments = await database.listDocuments<ShiftAssignmentDocument>(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-          [
-            Query.equal("studentId", [member.userId]),
-            Query.equal("status", ["assigned", "confirmed"])
-          ]
-        );
+      if (studentDetails.documents.length === 0) continue;
 
-        console.log(`Member ${member.userId} assignments:`, {
-          projectAssignments: projectAssignments.documents.length,
-          allAssignments: allAssignments.documents.length
-        });
+      const student = studentDetails.documents[0];
 
-        // If looking at past dates only and no project assignments, skip
-        if (!includesFuture && projectAssignments.documents.length === 0) {
-          console.log(`Skipping member ${member.userId} - no project assignments and past dates only`);
-          continue;
+      // Get user's availability
+      const userAvailability = await database.listDocuments<UserAvailabilityDocument>(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
+        [
+          Query.equal("userId", [member.userId]),
+          Query.equal("status", ["active"]),
+          Query.equal("age", ["new"]),
+        ]
+      );
+
+      // If no availability records, skip user
+      if (userAvailability.documents.length === 0) continue;
+
+      // Get no-shift dates for this user
+      const noShiftDates = await database.listDocuments(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_NO_SHIFT_DATES_COLLECTION_ID!,
+        [
+          Query.equal("studentId", [member.userId]),
+          Query.equal("projectId", [projectId])
+        ]
+      );
+
+      // Create a map of day and timeType for no-shift dates
+      const noShiftDayTypeMap = new Map<string, Set<string>>();
+      noShiftDates.documents.forEach(doc => {
+        const key = `${doc.dayOfWeek}-${doc.timeType}`;
+        if (!noShiftDayTypeMap.has(key)) {
+          noShiftDayTypeMap.set(key, new Set());
         }
+        noShiftDayTypeMap.get(key)?.add(doc.date);
+      });
 
-        // Get student details
-        const studentDetails = await database.listDocuments<StudentDocument>(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
-          [Query.equal("userId", [member.userId])]
-        );
+      // Check user's available days against no-shift dates
+      const userAvailableDays = userAvailability.documents.map(avail => 
+        `${avail.dayOfWeek}-${avail.timeType}`
+      );
 
-        if (studentDetails.documents.length === 0) {
-          console.log(`No student details found for member ${member.userId}`);
-          continue;
-        }
+      // Check if ALL available day-timeType combinations are marked as no-shift
+      const hasAllDaysMarkedNoShift = userAvailableDays.every(dayType => 
+        noShiftDayTypeMap.has(dayType)
+      );
 
-        // Get user's availability records
-        const availability = await database.listDocuments<UserAvailabilityDocument>(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
-          [
-            Query.equal("userId", [member.userId]),
-            Query.equal("status", ["active"]),
-            Query.equal("age", ["new"]),
-          ]
-        );
-
-        // Process available shifts
-        const availableShifts = projectShifts.documents
-          .filter(shift => {
-            // Check if shift is already assigned
-            const isAssigned = projectAssignments.documents.some(
-              assign => assign.shiftId === shift.shiftId
-            );
-            if (isAssigned) return false;
-
-            // Check availability match
-            return availability.documents.some(avail => 
-              normalizeDayName(avail.dayOfWeek) === normalizeDayName(shift.dayOfWeek) &&
-              avail.timeType === shift.timeType &&
-              isDateInRange(new Date(shift.date), new Date(avail.fromDate), new Date(avail.toDate))
-            );
-          })
-          .map(shift => ({
-            date: shift.date,
-            dayOfWeek: normalizeDayName(shift.dayOfWeek),
-            timeType: shift.timeType,
-            shiftId: shift.shiftId,
-            startTime: shift.startTime,
-            stopTime: shift.stopTime,
-            requiredStudents: shift.requiredStudents,
-            assignedCount: shift.assignedCount
-          }));
-
-        availabilities.push({
-          userId: member.userId,
-          name: `${studentDetails.documents[0].firstName} ${studentDetails.documents[0].lastName}`,
-          punctualityScore: studentDetails.documents[0].punctualityScore,
-          rating: studentDetails.documents[0].rating,
-          requestedDays: {
-            day: processRequestedDays(availability.documents, "day", availableShifts, projectAssignments.documents),
-            night: processRequestedDays(availability.documents, "night", availableShifts, projectAssignments.documents)
-          },
-          bookedDays: {
-            day: getBookedDays(allAssignments.documents, "day"),
-            night: getBookedDays(allAssignments.documents, "night")
-          },
-          availableShifts
-        });
-
-        console.log(`Added availability for member ${member.userId}`);
-
-      } catch (error) {
-        console.error(`Error processing member ${member.userId}:`, error);
+      // If all available days are marked as no-shift, skip this user
+      if (hasAllDaysMarkedNoShift) {
+        console.log(`Skipping user ${student.firstName} - all availability marked as no-shift`);
         continue;
       }
+
+      // Get available shifts
+      const availableShifts = await getAvailableShiftDays(
+        projectId,
+        member.userId,
+        effectiveRange
+      );
+
+      // Filter out shifts that fall on no-shift dates
+      const filteredShifts = availableShifts.filter(shift => {
+        const key = `${shift.dayOfWeek}-${shift.timeType}`;
+        const noShiftDates = noShiftDayTypeMap.get(key);
+        return !noShiftDates?.has(format(new Date(shift.date), "yyyy-MM-dd"));
+      });
+
+      // Process requested days (only include days not marked as no-shift)
+      const requestedDays = {
+        day: Array.from(
+          new Set(
+            userAvailability.documents
+              .filter((a) => {
+                const key = `${a.dayOfWeek}-day`;
+                return a.timeType === "day" && !noShiftDayTypeMap.has(key);
+              })
+              .map((a) => normalizeDayName(a.dayOfWeek))
+          )
+        ),
+        night: Array.from(
+          new Set(
+            userAvailability.documents
+              .filter((a) => {
+                const key = `${a.dayOfWeek}-night`;
+                return a.timeType === "night" && !noShiftDayTypeMap.has(key);
+              })
+              .map((a) => normalizeDayName(a.dayOfWeek))
+          )
+        ),
+      };
+
+      // Get assignments and process booked days
+      let bookedDays: { day: string[]; night: string[] } = {
+        day: [],
+        night: []
+      };
+      
+      const assignments = await database.listDocuments<ShiftAssignmentDocument>(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+        [
+          Query.equal("studentId", [member.userId]),
+          Query.equal("status", ["assigned", "confirmed"]),
+        ]
+      );
+
+      if (assignments.documents.length > 0) {
+        const assignedShiftIds = assignments.documents.map((a) => a.shiftId);
+        const assignedShifts = await database.listDocuments<ShiftDocument>(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+          [
+            Query.equal("shiftId", assignedShiftIds),
+            Query.greaterThanEqual("date", startOfDay(effectiveRange.from).toISOString()),
+            Query.lessThanEqual("date", endOfDay(effectiveRange.to).toISOString()),
+          ]
+        );
+
+        bookedDays = {
+          day: Array.from(
+            new Set(
+              assignedShifts.documents
+                .filter((s) => s.timeType === "day")
+                .map((s) => normalizeDayName(s.dayOfWeek))
+            )
+          ),
+          night: Array.from(
+            new Set(
+              assignedShifts.documents
+                .filter((s) => s.timeType === "night")
+                .map((s) => normalizeDayName(s.dayOfWeek))
+            )
+          ),
+        };
+      }
+
+      // Always include user in availabilities, even if they have no shifts currently available
+      availabilities.push({
+        userId: member.userId,
+        name: `${student.firstName} ${student.lastName}`,
+        punctualityScore: student.punctualityScore || 100,
+        rating: student.rating || 5.0,
+        requestedDays,
+        bookedDays,
+        availableShifts: filteredShifts.map((shift) => ({
+          ...shift,
+          dayOfWeek: normalizeDayName(shift.dayOfWeek),
+        })),
+      });
     }
 
-    console.log(`Processed ${availabilities.length} total availabilities`);
+    console.log("Final processed availabilities:", availabilities);
     return availabilities;
-
   } catch (error) {
     console.error("Error getting user availabilities:", error);
     return [];
   }
 }
 
-
-function processRequestedDays(
-  availabilityDocs: UserAvailabilityDocument[],
-  timeType: "day" | "night",
-  availableShifts: ShiftDay[],
-  assignments: ShiftAssignmentDocument[]
-): RequestedDayStatus[] {
-  // Filter out any invalid documents
-  const validDocs = availabilityDocs.filter(doc => doc && doc.dayOfWeek);
-  
-  // Get unique normalized days
-  const uniqueDays = Array.from(new Set(
-    validDocs
-      .filter(a => a.timeType === timeType)
-      .map(a => normalizeDayName(a.dayOfWeek))
-      .filter(day => day) // Remove any empty strings
-  ));
-
-  return uniqueDays.map(day => ({
-    day,
-    hasShift: availableShifts.some(s => 
-      normalizeDayName(s.dayOfWeek) === day && s.timeType === timeType
-    ),
-    isBooked: assignments.some(a => 
-      normalizeDayName(a.dayOfWeek) === day && a.timeType === timeType
-    )
-  }));
-}
-
-// Add this helper function at the top with your other helper functions
+// Add this helper function for date formatting
 function formatDateTime(dateTimeString: string): string {
   const date = new Date(dateTimeString);
   
   // Format date as DD-MM-YYYY
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const year = date.getFullYear();
-  
+  const dateStr = date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+
   // Format time as HH:MM with AM/PM
-  let hours = date.getHours();
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  
-  // Convert to 12-hour format
-  hours = hours % 12;
-  hours = hours ? hours : 12; // Convert 0 to 12
-  
-  return `${day}-${month}-${year} (${hours}:${minutes} ${ampm})`;
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  return `${dateStr} (${timeStr})`;
 }
 
+// Update the createShiftAssignment function
 export async function createShiftAssignment(
   projectId: string,
-  userId: string,
+  studentId: string,
   shiftId: string,
-  workerData?: UserAvailabilityWithStatus
+  workerData?: UserAvailability
 ): Promise<AssignmentCreationResult> {
   const { database } = await createAdminClient();
 
@@ -820,53 +927,34 @@ export async function createShiftAssignment(
       shiftId
     );
 
-    // Get student details for email
-    const studentDetails = await database.listDocuments<StudentDocument>(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
-      [Query.equal("userId", [userId])]
-    );
-
-    if (studentDetails.documents.length === 0) {
-      return {
-        success: false,
-        error: "Student details not found"
-      };
-    }
-
-    // Get project details for email
-    const project = await database.getDocument(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
-      projectId
-    );
-
     // Normalize the shift day (which is in lowercase) to match our format (Mon, Tue, etc)
     const normalizedShiftDay = normalizeDayName(shift.dayOfWeek);
 
     // If worker data was passed, use it for validation
     if (workerData) {
       // 1. Check if user requested/is available for this day and shift type
-      const isRequested = shift.timeType === 'day'
-        ? workerData.requestedDays.day.some(day => day.day === normalizedShiftDay)
-        : workerData.requestedDays.night.some(day => day.day === normalizedShiftDay);
+      const isRequested =
+        shift.timeType === "day"
+          ? workerData.requestedDays.day.includes(normalizedShiftDay)
+          : workerData.requestedDays.night.includes(normalizedShiftDay);
 
       if (!isRequested) {
         return {
           success: false,
-          error: `Student is not available for ${normalizedShiftDay} ${shift.timeType} shifts`
+          error: `Student is not available for ${normalizedShiftDay} ${shift.timeType} shifts`,
         };
       }
 
       // 2. Check if user already has a booking on this day
-      const hasBooking = shift.timeType === 'day'
-        ? workerData.bookedDays.day.includes(normalizedShiftDay)
-        : workerData.bookedDays.night.includes(normalizedShiftDay);
+      const hasBooking =
+        shift.timeType === "day"
+          ? workerData.bookedDays.day.includes(normalizedShiftDay)
+          : workerData.bookedDays.night.includes(normalizedShiftDay);
 
       if (hasBooking) {
         return {
           success: false,
-          error: `Student already has a ${shift.timeType} shift booked on ${normalizedShiftDay}`
+          error: `Student already has a ${shift.timeType} shift booked on ${normalizedShiftDay}`,
         };
       }
     }
@@ -877,7 +965,7 @@ export async function createShiftAssignment(
       process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
       [
         Query.equal("projectId", [projectId]),
-        Query.equal("userId", [userId]),
+        Query.equal("userId", [studentId]),
         Query.equal("status", ["active"]),
       ]
     );
@@ -885,25 +973,48 @@ export async function createShiftAssignment(
     if (projectMember.documents.length === 0) {
       return {
         success: false,
-        error: "Student is not an active member of this project"
+        error: "Student is not an active member of this project",
       };
     }
 
-    // 4. Create the assignment with all required fields
+    // Get student details for email
+    const studentDetails = await database.listDocuments<StudentDocument>(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+      [Query.equal("userId", [studentId])]
+    );
+
+    if (studentDetails.documents.length === 0) {
+      return {
+        success: false,
+        error: "Student details not found",
+      };
+    }
+
+    const student = studentDetails.documents[0];
+
+    // Get project details for email
+    const project = await database.getDocument(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+      projectId
+    );
+
+    // Create the assignment
     const assignmentId = ID.unique();
     const now = new Date().toISOString();
-    
+
     const assignmentData = {
       assignmentId,
       shiftId: shift.shiftId,
-      studentId: userId,
+      studentId,
       projectMemberId: projectMember.documents[0].memberId,
       status: "assigned" as const,
-      assignedBy: "system", 
+      assignedBy: "system",
       assignedAt: now,
       confirmedAt: null,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     const assignment = await database.createDocument(
@@ -913,107 +1024,48 @@ export async function createShiftAssignment(
       assignmentData
     );
 
-    // 5. Update shift assigned count
+    // Update shift assigned count
     await database.updateDocument(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       shift.$id,
       {
         assignedCount: shift.assignedCount + 1,
-        updatedAt: now
+        updatedAt: now,
       }
     );
 
-    // Send email notification with formatted dates
+    // Send email notification
     try {
       await sendProjectAssignmentEmail({
-        studentName: `${studentDetails.documents[0].firstName} ${studentDetails.documents[0].lastName}`,
-        studentEmail: studentDetails.documents[0].email,
+        studentName: `${student.firstName} ${student.lastName}`,
+        studentEmail: student.email, // Make sure this field exists in StudentDocument
         projectName: project.name,
         startTime: formatDateTime(shift.startTime),
         endTime: formatDateTime(shift.stopTime),
       });
     } catch (emailError) {
       console.error("Failed to send assignment email:", emailError);
-      // Don't fail the assignment creation if email fails
+      // Continue with the assignment creation even if email fails
     }
 
     return {
       success: true,
       isExtra: shift.assignedCount >= shift.requiredStudents,
-      assignmentDetails: assignment as ShiftAssignmentDocument
+      assignmentDetails: assignment as ShiftAssignmentDocument,
     };
-
   } catch (error) {
     console.error("Error creating shift assignment:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to create assignment"
+      error: error instanceof Error ? error.message : "Failed to create assignment",
     };
   }
 }
-
-
-
 
 //===========================================================================
 // POTENTIALLY USELESS FUNCTIONS
 //===========================================================================
-
-// Helper function to validate availability
-async function validateAvailability(
-  studentId: string,
-  shift: ShiftDocument
-): Promise<AssignmentValidationResult> {
-  const { database } = await createAdminClient();
-
-  try {
-    const shiftDate = parseISO(shift.date);
-    const dayOfWeek = format(shiftDate, "EEE");
-
-    // Get user's availability
-    const availability = await database.listDocuments<UserAvailabilityDocument>(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_USER_AVAILABILITY_COLLECTION_ID!,
-      [
-        Query.equal("userId", [studentId]),
-        Query.equal("status", ["active"]),
-        Query.equal("age", ["new"]),
-        Query.equal("dayOfWeek", [dayOfWeek]),
-        Query.equal("timeType", [shift.timeType]),
-      ]
-    );
-
-    if (availability.documents.length === 0) {
-      return {
-        isValid: false,
-        error: `Student is not available for ${dayOfWeek} ${shift.timeType} shifts`,
-      };
-    }
-
-    // Check if the shift date falls within the availability period
-    const hasValidAvailability = availability.documents.some((avail) => {
-      const availStart = parseISO(avail.fromDate);
-      const availEnd = parseISO(avail.toDate);
-      return shiftDate >= availStart && shiftDate <= availEnd;
-    });
-
-    if (!hasValidAvailability) {
-      return {
-        isValid: false,
-        error: `Student's availability does not cover the shift date`,
-      };
-    }
-
-    return { isValid: true };
-  } catch (error) {
-    console.error("Error validating availability:", error);
-    return {
-      isValid: false,
-      error: "Failed to validate availability",
-    };
-  }
-}
 
 // Helper function to validate no booking conflicts
 async function validateNoBookingConflicts(
@@ -1108,7 +1160,6 @@ export interface SelectedDaysStats {
   };
 }
 
-
 export async function getSelectedDaysStats(
   projectId: string,
   selectedDays: string[],
@@ -1117,6 +1168,11 @@ export async function getSelectedDaysStats(
   const { database } = await createAdminClient();
 
   try {
+    // Use current week if no date range provided and ensure proper typing
+    const effectiveRange: DateRange = dateRange?.from && dateRange?.to
+      ? { from: dateRange.from, to: dateRange.to }
+      : getDefaultDateRange();
+
     // Get active project members (for total requests)
     const members = await database.listDocuments<ProjectMemberDocument>(
       process.env.APPWRITE_DATABASE_ID!,
@@ -1129,17 +1185,12 @@ export async function getSelectedDaysStats(
     );
 
     // Get all shifts within date range
-    let shiftQueries = [
+     const shiftQueries = [
       Query.equal("projectId", [projectId]),
       Query.equal("status", ["published", "inProgress"]),
+      Query.greaterThanEqual("date", effectiveRange.from.toISOString()),
+      Query.lessThanEqual("date", effectiveRange.to.toISOString())
     ];
-
-    if (dateRange?.from && dateRange?.to) {
-      shiftQueries.push(
-        Query.greaterThanEqual("date", startOfDay(dateRange.from).toISOString()),
-        Query.lessThanEqual("date", endOfDay(dateRange.to).toISOString())
-      );
-    }
 
     const shifts = await database.listDocuments<ShiftDocument>(
       process.env.APPWRITE_DATABASE_ID!,
@@ -1151,33 +1202,42 @@ export async function getSelectedDaysStats(
 
     // Helper function to normalize day names for comparison
     const normalizeDayForComparison = (day: string): string => {
-      return day.toLowerCase().charAt(0).toUpperCase() + day.toLowerCase().slice(1, 3);
+      return (
+        day.toLowerCase().charAt(0).toUpperCase() +
+        day.toLowerCase().slice(1, 3)
+      );
     };
 
     // Group shifts by day of week and type
-    const shiftsByDay = shifts.documents.reduce((acc, shift) => {
-      const normalizedDay = normalizeDayForComparison(shift.dayOfWeek);
-      
-      if (!acc[normalizedDay]) {
-        acc[normalizedDay] = {
-          day: { required: 0, assigned: 0 },
-          night: { required: 0, assigned: 0 }
-        };
-      }
+    const shiftsByDay = shifts.documents.reduce(
+      (acc, shift) => {
+        const normalizedDay = normalizeDayForComparison(shift.dayOfWeek);
 
-      if (shift.timeType === "day") {
-        acc[normalizedDay].day.required += shift.requiredStudents;
-        acc[normalizedDay].day.assigned += shift.assignedCount;
-      } else {
-        acc[normalizedDay].night.required += shift.requiredStudents;
-        acc[normalizedDay].night.assigned += shift.assignedCount;
-      }
+        if (!acc[normalizedDay]) {
+          acc[normalizedDay] = {
+            day: { required: 0, assigned: 0 },
+            night: { required: 0, assigned: 0 },
+          };
+        }
 
-      return acc;
-    }, {} as Record<string, {
-      day: { required: number; assigned: number; };
-      night: { required: number; assigned: number; };
-    }>);
+        if (shift.timeType === "day") {
+          acc[normalizedDay].day.required += shift.requiredStudents;
+          acc[normalizedDay].day.assigned += shift.assignedCount;
+        } else {
+          acc[normalizedDay].night.required += shift.requiredStudents;
+          acc[normalizedDay].night.assigned += shift.assignedCount;
+        }
+
+        return acc;
+      },
+      {} as Record<
+        string,
+        {
+          day: { required: number; assigned: number };
+          night: { required: number; assigned: number };
+        }
+      >
+    );
 
     console.log("Shifts grouped by day:", shiftsByDay);
 
@@ -1201,7 +1261,6 @@ export async function getSelectedDaysStats(
 
     console.log("Final stats for selected days:", selectedDaysStats);
     return selectedDaysStats;
-
   } catch (error) {
     console.error("Error getting selected days stats:", error);
     return {
@@ -1210,16 +1269,4 @@ export async function getSelectedDaysStats(
       demand: { day: 0, night: 0 },
     };
   }
-}
-
-// Helper function to get booked days
-function getBookedDays(
-  assignments: ShiftAssignmentDocument[],
-  timeType: "day" | "night"
-): string[] {
-  return Array.from(new Set(
-    assignments
-      .filter(a => a.timeType === timeType)
-      .map(a => normalizeDayName(a.dayOfWeek))
-  ));
 }

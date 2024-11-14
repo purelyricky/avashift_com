@@ -13,12 +13,13 @@ import {
     isOpen: boolean;
     onClose: () => void;
     error: string;
+    style?: React.CSSProperties;
   }
   
-  export function ErrorDialog({ isOpen, onClose, error }: ErrorDialogProps) {
+  export function ErrorDialog({ isOpen, onClose, error, style }: ErrorDialogProps) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent>
+        <DialogContent style={style}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <XCircle className="h-5 w-5" />

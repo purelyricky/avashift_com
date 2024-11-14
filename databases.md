@@ -221,3 +221,19 @@ table: verificationCodes
 - createdAt (datetime) [Required]
 - verifiedAt (datetime) [nullable]
 - verifiedBy (string, 36) [Foreign Key -> gatemen.userId, nullable]
+
+
+# NO SHIFT DATES MANAGEMENT
+APPWRITE_NO_SHIFT_DATES_COLLECTION_ID: NO_SHIFT_DATES_COLLECTION_ID,
+table: noShiftDates
+- noShiftDateId (string, 36) [Primary Key, Required]
+- projectId (string, 36) [Foreign Key -> projects.projectId, Required]
+- studentId (string, 36) [Foreign Key -> students.userId, Required]
+- membershipId (string, 36) [Foreign Key -> projectMembers.memberId, Required]
+- date (string) [Required]  // Format: YYYY-MM-DD
+- dayOfWeek (string) [Required]
+- timeType (string[enum: 'day', 'night']) [Required]
+- createdBy (string, 36) [Required]
+- createdAt (datetime) [Required]
+
+
