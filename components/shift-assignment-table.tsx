@@ -127,14 +127,12 @@ export const COLORS = {
 
 export interface ShiftAssignmentExport {
   studentName: string;
-  shiftDate: string;
-  shiftDay: string;
-  shiftType: string;
-  startTime: string;
-  stopTime: string;
-  requiresStudents: number;
-  assignedCount: number;
-  isExtra: boolean;
+  requestedDayShifts: string;  // Will be comma-separated string of days
+  requestedNightShifts: string;  // Will be comma-separated string of days
+  bookedDayShifts: string;  // Will be comma-separated string of days
+  bookedNightShifts: string;  // Will be comma-separated string of days
+  punctualityScore: number;
+  rating: number;
 }
 
 export interface ProgressStats {
@@ -555,41 +553,65 @@ export default function ShiftAssignmentTable({
 
   const handleExportData = async () => {
     try {
-      const exportData: ShiftAssignmentExport[] = workers.flatMap((worker) =>
-        worker.availableShifts.map((shift) => ({
-          studentName: worker.name,
-          shiftDate: format(new Date(shift.date), "yyyy-MM-dd"),
-          shiftDay: format(new Date(shift.date), "EEEE"),
-          shiftType: shift.timeType,
-          startTime: format(new Date(shift.startTime), "HH:mm"),
-          stopTime: format(new Date(shift.stopTime), "HH:mm"),
-          requiresStudents: shift.requiredStudents,
-          assignedCount: shift.assignedCount,
-          isExtra: shift.assignedCount >= shift.requiredStudents,
-        }))
-      );
-
-      const ws = XLSX.utils.json_to_sheet(exportData);
+      const exportData: ShiftAssignmentExport[] = workers.map((worker) => ({
+        studentName: worker.name,
+        requestedDayShifts: worker.requestedDays.day.join(", "),
+        requestedNightShifts: worker.requestedDays.night.join(", "),
+        bookedDayShifts: worker.bookedDays.day.join(", "),
+        bookedNightShifts: worker.bookedDays.night.join(", "),
+        punctualityScore: worker.punctualityScore,
+        rating: worker.rating
+      }));
+  
+      // Create workbook and worksheet
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Shift Assignments");
-
+      const ws = XLSX.utils.json_to_sheet(exportData);
+  
+      // Customize column widths
+      const columnWidths = [
+        { wch: 20 },  // studentName
+        { wch: 30 },  // requestedDayShifts
+        { wch: 30 },  // requestedNightShifts
+        { wch: 30 },  // bookedDayShifts
+        { wch: 30 },  // bookedNightShifts
+        { wch: 15 },  // punctualityScore
+        { wch: 10 },  // rating
+      ];
+      ws["!cols"] = columnWidths;
+  
+      // Add headers with proper formatting
+      XLSX.utils.sheet_add_aoa(ws, [[
+        "Student Name",
+        "Requested Day Shifts",
+        "Requested Night Shifts",
+        "Booked Day Shifts",
+        "Booked Night Shifts",
+        "Punctuality Score (%)",
+        "Rating"
+      ]], { origin: "A1" });
+  
+      // Add the worksheet to the workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Student Assignments");
+  
+      // Generate Excel file
       const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const data = new Blob([excelBuffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
-
+  
+      // Save the file
       saveAs(
         data,
-        `shift-assignments-${format(new Date(), "yyyy-MM-dd")}.xlsx`
+        `student-assignments-${format(new Date(), "yyyy-MM-dd")}.xlsx`
       );
-
+  
       console.log(
         "Export Successful:",
-        "Shift assignments have been exported to Excel"
+        "Student assignments have been exported to Excel"
       );
     } catch (error) {
       console.error("Export error:", error);
-      console.error("Export Failed:", "Failed to export shift assignments");
+      console.error("Export Failed:", "Failed to export student assignments");
     }
   };
 

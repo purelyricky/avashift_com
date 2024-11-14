@@ -24,7 +24,7 @@ export const sendProjectAssignmentEmail = async ({
     await resend.emails.send({
       from: 'Ava Shift <onboarding@resend.dev>',
       to: studentEmail,
-      subject: 'New Project Assignment',
+      subject: 'New Shift Assignment',
       react: ProjectAssignmentEmail({
         studentName,
         projectName,

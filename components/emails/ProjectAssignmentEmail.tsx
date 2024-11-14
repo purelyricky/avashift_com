@@ -24,13 +24,13 @@ interface ProjectAssignmentEmailProps {
             margin: "0 0 20px 0",
             textAlign: "center"
           }}>
-            New Project Assignment
+            New Shift Assignment
           </h1>
           <p style={{ fontSize: "16px", lineHeight: "1.5", color: "#4a5568" }}>
             Hello {studentName},
           </p>
           <p style={{ fontSize: "16px", lineHeight: "1.5", color: "#4a5568" }}>
-            You have been assigned to a new project in Ava Shift.
+            You have been assigned to a new shift in Ava Shift.
           </p>
           <div style={{
             backgroundColor: "#f8fafc",
@@ -43,7 +43,7 @@ interface ProjectAssignmentEmailProps {
               fontSize: "18px",
               margin: "0 0 15px 0"
             }}>
-              Project Details
+              Shift Details
             </h2>
             <table width="100%" style={{ borderCollapse: "collapse" }}>
               <tr>

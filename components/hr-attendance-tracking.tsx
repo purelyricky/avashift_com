@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { 
   Users, Clock, AlertTriangle, CheckCircle, Search, 
-  ChevronLeft, ChevronRight, Info, MessageSquare, Calendar 
+  ChevronLeft, ChevronRight, Info, MessageSquare, Calendar,
+  AlertCircle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -338,13 +339,12 @@ export function HrAttendanceTracking({ userId }: { userId: string }) {
           </div>
         </div>
   
-        {/* Contact Modal - To be implemented with messaging functionality */}
+        {/* Contact Modal */}
         <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
           <DialogContent className="sm:max-w-[425px] bg-white">
             <DialogHeader>
               <DialogTitle>Contact {contactType === 'leader' ? 'Leader' : 'Student'}</DialogTitle>
               <DialogDescription>
-                {/* Note: Messaging functionality to be implemented */}
                 You are about to send a message to the {contactType} for {selectedWorker?.name}.
               </DialogDescription>
             </DialogHeader>
@@ -356,11 +356,21 @@ export function HrAttendanceTracking({ userId }: { userId: string }) {
                   <p className="text-sm text-gray-500">{selectedWorker?.project}</p>
                 </div>
               </div>
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center space-x-2 text-red-500">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <p className="text-sm">Sorry we are not supporting this feature for now, please send them an email manually</p>
+                </div>
+                <div className="flex items-center space-x-2 text-red-500">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <p className="text-sm">Sajnáljuk, ezt a funkciót egyelőre nem támogatjuk, kérjük, küldjön nekik e-mailt manuálisan</p>
+                </div>
+              </div>
               <Textarea
-                placeholder="Type your message here."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="min-h-[100px]"
+                className="min-h-[20px] bg-gray-50"
+                disabled
               />
             </div>
             <DialogFooter>
@@ -368,12 +378,11 @@ export function HrAttendanceTracking({ userId }: { userId: string }) {
                 type="submit" 
                 className="bg-[#3D0C02] text-white hover:bg-[#3D0C02]/90"
                 onClick={() => {
-                  // Messaging functionality to be implemented
                   setContactModalOpen(false);
                   setMessage("");
                 }}
               >
-                Send Message
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -4,6 +4,7 @@ import { ID, Query } from "node-appwrite";
 import { createAdminClient, createSessionClient } from "@/lib/actions/appwrite";
 import { cookies } from "next/headers";
 import { parseStringify } from "../utils";
+import { sendAvailabilityUpdateEmail } from '@/lib/emails';
 import calculateHours from "../calculate";
 
 const getCollectionIdForRole = (role: UserRole) => {
@@ -540,6 +541,12 @@ export const bulkUpdateAvailability = async (data: {
   try {
     const { database } = await createAdminClient();
 
+    // Get user info for the email
+    const userResponse = await getUserInfo({ userId });
+    if (userResponse.status !== 'success' || !userResponse.data) {
+      throw new Error('User not found');
+    }
+
     // First, set all existing active availabilities to 'old' and inactive
     const existingAvailabilities = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
@@ -588,6 +595,27 @@ export const bulkUpdateAvailability = async (data: {
     });
 
     await Promise.all(createPromises);
+
+    // Format dates for email (DD/MM/YYYY)
+    const formatDate = (dateString: string) => {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    };
+
+    // Send email notification
+    await sendAvailabilityUpdateEmail({
+      userName: `${userResponse.data.firstName} ${userResponse.data.lastName}`,
+      userEmail: userResponse.data.email,
+      role: userResponse.data.role,
+      availabilities: availabilities.map(a => ({
+        day: a.dayOfWeek,
+        type: a.timeType
+      }))
+    });
 
     return { status: 'success' };
   } catch (error) {

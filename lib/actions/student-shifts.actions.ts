@@ -328,7 +328,8 @@ export async function getFillerShifts(studentId: string): Promise<ShiftWithDetai
           Query.equal("projectId", projectIds),
           Query.equal("shiftType", "filler"),
           Query.greaterThanEqual("date", today.toISOString().split('T')[0]),
-          Query.equal("status", "published")
+          Query.equal("status", "published"),
+          Query.lessThan("assignedCount", "requiredStudents")
         ]
       );
   

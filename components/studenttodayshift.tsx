@@ -98,6 +98,7 @@ export function StudentTodayShiftComponent({ userId }: { userId: string }) {
   const [replacementEmail, setReplacementEmail] = useState("");
   const [fillerApplicationStatus, setFillerApplicationStatus] =
     useState<ApplicationStatus>({});
+  const [fillerSuccessModal, setFillerSuccessModal] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -297,6 +298,7 @@ export function StudentTodayShiftComponent({ userId }: { userId: string }) {
   };
 
   const handleTakeFillerShift = async (shiftId: string) => {
+    setFillerShiftLoading(prev => ({ ...prev, [shiftId]: true }));
     try {
       const result = await applyForFillerShift(shiftId, userId);
       if (result.success) {
@@ -304,9 +306,13 @@ export function StudentTodayShiftComponent({ userId }: { userId: string }) {
           ...prev,
           [shiftId]: true
         }));
+        setFillerSuccessModal(true);
+        setFillerShifts(prev => prev.filter(shift => shift.shiftId !== shiftId));
       }
     } catch (err) {
       console.error("Failed to apply for filler shift:", err);
+    } finally {
+      setFillerShiftLoading(prev => ({ ...prev, [shiftId]: false }));
     }
   };
 
@@ -567,12 +573,19 @@ export function StudentTodayShiftComponent({ userId }: { userId: string }) {
                       variant="outline"
                       size="sm"
                       onClick={() => handleTakeFillerShift(shift.shiftId)}
-                      disabled={fillerRequestStatus[shift.shiftId]}
+                      disabled={fillerRequestStatus[shift.shiftId] || fillerShiftLoading[shift.shiftId]}
                       className="bg-[#191970] text-white hover:bg-[#191970]/90"
                     >
-                      {fillerRequestStatus[shift.shiftId]
-                        ? "Pending Request"
-                        : "Take Shift"}
+                      {fillerShiftLoading[shift.shiftId] ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Applying...
+                        </>
+                      ) : fillerRequestStatus[shift.shiftId] ? (
+                        "Pending Request"
+                      ) : (
+                        "Take Shift"
+                      )}
                     </Button>
                   </div>
                 </TableCell>
@@ -788,6 +801,29 @@ export function StudentTodayShiftComponent({ userId }: { userId: string }) {
               className="bg-[#191970] text-white hover:bg-[#191970]/90"
             >
               Submit Cancel Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Filler Success Modal */}
+      <Dialog open={fillerSuccessModal} onOpenChange={setFillerSuccessModal}>
+        <DialogContent className="bg-[#ffffff]">
+          <DialogHeader>
+            <DialogTitle>Success!</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center py-4">
+            <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+            <p className="text-center">
+              Your application for the filler shift has been submitted successfully!
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setFillerSuccessModal(false)}
+              className="bg-[#191970] text-white hover:bg-[#191970]/90"
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

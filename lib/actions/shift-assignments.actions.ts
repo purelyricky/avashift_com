@@ -299,6 +299,7 @@ export async function getAvailableShiftDays(
     let shiftQueries = [
       Query.equal("projectId", [projectId]),
       Query.equal("status", ["published", "inProgress"]),
+      Query.equal("shiftType", ["normal"]),
     ];
 
     if (dateRange?.from && dateRange?.to) {

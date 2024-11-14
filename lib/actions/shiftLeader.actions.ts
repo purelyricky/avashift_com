@@ -3,7 +3,7 @@
 
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/actions/appwrite";
-
+import { sendStudentNoteEmail } from '@/lib/emails';
 // Type definitions
 interface StudentShiftInfo {
   id: string;
@@ -192,6 +192,7 @@ export async function addStudentComment(
     const { database } = await createAdminClient();
     
     try {
+      // Create the feedback document
       const feedbackId = ID.unique();
       await database.createDocument(
         process.env.APPWRITE_DATABASE_ID!,
@@ -208,6 +209,42 @@ export async function addStudentComment(
           isRead: false
         }
       );
+
+      // Get additional information needed for the email
+      const [student, project, leader, admin] = await Promise.all([
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+          [Query.equal('userId', [studentId])]
+        ),
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+          [Query.equal('projectId', [projectId])]
+        ),
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_USERS_COLLECTION_ID!,
+          [Query.equal('userId', [leaderId])]
+        ),
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_USERS_COLLECTION_ID!,
+          [Query.equal('role', ['admin'])]
+        )
+      ]);
+
+      // Send email to admin
+      if (admin.documents.length > 0) {
+        await sendStudentNoteEmail({
+          adminName: admin.documents[0].name,
+          adminEmail: admin.documents[0].email,
+          studentName: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
+          projectName: project.documents[0].name,
+          leaderName: leader.documents[0].name,
+          note: comment
+        });
+      }
   
       return true;
     } catch (error) {

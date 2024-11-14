@@ -66,7 +66,7 @@ async function RightSidebar({ user }: SidebarProps) {
         </div>
 
         <div className="mt-10 flex flex-1 flex-col gap-6">
-          <AdminNotificationCenter />
+          <AdminNotificationCenter userId={user.userId} />
         </div>
       </section>
     </aside>

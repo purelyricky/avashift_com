@@ -5,8 +5,8 @@ import ProjectMembersTable from '@/components/projects-page'
 import ShiftAssignmentTable from '@/components/shift-assignment-table'
 import HeaderBox from '@/components/HeaderBox';
 import { ShiftAssignmentStats, UserAvailability } from '@/lib/actions/shift-assignments.actions';
-import RequestManagementTable from "@/components/request-management-table-component";
-import { RequestData, RequestManagementStats } from "@/lib/actions/request-management.actions";
+import AdminRequestsTable from "@/components/request-management-table-component";
+import { AdminRequestStats, AdminRequestWithDetails } from "@/lib/actions/admin-requests.actions";
 
 interface ProjectPageClientProps {
   projectId: string;
@@ -17,10 +17,10 @@ interface ProjectPageClientProps {
   };
   initialStats: ShiftAssignmentStats;
   initialAvailabilities: UserAvailability[];
-  // Add new props for request management
-  requestStats: RequestManagementStats;
-  requests: RequestData[];
-  userId: string; // Add userId for request management
+  // Updated props for request management
+  adminRequestStats: AdminRequestStats;
+  adminRequests: AdminRequestWithDetails[];
+  adminId: string; // Changed from userId to be more specific
 }
 
 export default function ProjectPageClient({ 
@@ -28,10 +28,9 @@ export default function ProjectPageClient({
   projectDetails,
   initialStats,
   initialAvailabilities,
-  // Add new props to function parameters
-  requestStats,
-  requests,
-  userId
+  adminRequestStats,
+  adminRequests,
+  adminId
 }: ProjectPageClientProps) {
   const headerTitle = `${projectDetails.name} Project Management`;
 
@@ -101,11 +100,11 @@ export default function ProjectPageClient({
           </TabsContent>
 
           <TabsContent value="requests">
-            <RequestManagementTable 
+            <AdminRequestsTable 
               projectId={projectId}
-              initialStats={requestStats}
-              initialRequests={requests}
-              userId={userId}
+              adminId={adminId}
+              initialStats={adminRequestStats}
+              initialRequests={adminRequests}
             />
           </TabsContent>
         </Tabs>
