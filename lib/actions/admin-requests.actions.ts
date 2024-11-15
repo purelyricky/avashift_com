@@ -193,6 +193,11 @@ export async function getAdminRequests(
     const projectShiftIds = shifts.documents.map(shift => shift.shiftId);
     console.log('Project shift IDs:', projectShiftIds);
 
+    // If there are no shifts, return empty array instead of making invalid query
+    if (projectShiftIds.length === 0) {
+      return [];
+    }
+
     // Then query requests based on these shift IDs
     let queries = [
       Query.equal("status", ["pending"]),
