@@ -131,7 +131,7 @@ export async function getProjectShifts(projectId: string) {
       currentDate.setHours(0, 0, 0, 0);
       const isoCurrentDate = currentDate.toISOString();
   
-      // First get all user's project memberships
+      // Get user's project memberships
       const memberships = await database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
         process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
@@ -154,19 +154,45 @@ export async function getProjectShifts(projectId: string) {
         [Query.equal('projectId', projectIds)]
       );
   
-      // Get shifts that start from current date onwards
+      // Get shifts
       const shifts = await database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
         process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
         [
           Query.equal('projectId', projectIds),
           Query.equal('status', ['draft', 'published', 'inProgress']),
-          Query.greaterThanEqual('startTime', isoCurrentDate), // Only get shifts from current date onwards
-          Query.orderAsc('startTime') // Order by start time, earliest first
+          Query.greaterThanEqual('startTime', isoCurrentDate),
+          Query.orderAsc('startTime')
         ]
       );
   
-      // Group shifts by project
+      // Get all unique leader and gateman IDs from shifts
+      const leaderIds = Array.from(new Set(shifts.documents.map(shift => shift.shiftLeaderId)));
+      const gatemanIds = Array.from(new Set(shifts.documents.map(shift => shift.gatemanId)));
+  
+      // Fetch all leaders and gatemen in bulk
+      const [leaders, gatemen] = await Promise.all([
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
+          [Query.equal('userId', leaderIds)]
+        ),
+        database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_GATEMEN_COLLECTION_ID!,
+          [Query.equal('userId', gatemanIds)]
+        )
+      ]);
+  
+      // Create lookup maps for quick access
+      const leaderMap = new Map(leaders.documents.map(leader => 
+        [leader.userId, `${leader.firstName} ${leader.lastName}`]
+      ));
+      const gatemanMap = new Map(gatemen.documents.map(gateman => 
+        [gateman.userId, `${gateman.firstName} ${gateman.lastName}`]
+      ));
+  
+      // Group shifts by project with resolved names
       const projectsWithShifts = projects.documents.map(project => {
         const projectShifts = shifts.documents
           .filter(shift => shift.projectId === project.projectId)
@@ -179,7 +205,9 @@ export async function getProjectShifts(projectId: string) {
             workers: shift.requiredStudents,
             type: shift.timeType,
             leader: shift.shiftLeaderId,
+            leaderName: leaderMap.get(shift.shiftLeaderId) || shift.shiftLeaderId,
             securityGuard: shift.gatemanId,
+            securityGuardName: gatemanMap.get(shift.gatemanId) || shift.gatemanId,
             shiftType: shift.shiftType,
             shiftId: shift.shiftId
           }));
@@ -192,7 +220,7 @@ export async function getProjectShifts(projectId: string) {
           status: project.status,
           shifts: projectShifts
         };
-      }).filter(Boolean); // Remove null entries (projects without shifts)
+      }).filter(Boolean);
   
       return projectsWithShifts;
     } catch (error) {

@@ -5,6 +5,9 @@ import { RequestStatusUpdateEmail } from '@/components/emails/RequestStatusUpdat
 import { StudentNoteEmail } from '@/components/emails/StudentNoteEmail';
 import { Resend } from 'resend';
 
+if (!process.env.RESEND_API_KEY) {
+  throw new Error('RESEND_API_KEY environment variable is not set');
+}
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendProjectAssignmentEmail = async ({
@@ -22,7 +25,7 @@ export const sendProjectAssignmentEmail = async ({
 }) => {
   try {
     await resend.emails.send({
-      from: 'Ava Shift <onboarding@resend.dev>',
+      from: 'Ava Shift <send@avashift.com>',
       to: studentEmail,
       subject: 'New Shift Assignment',
       react: ProjectAssignmentEmail({
@@ -50,8 +53,11 @@ export const sendAvailabilityUpdateEmail = async ({
   availabilities: Array<{ day: string; type: 'day' | 'night' }>;
 }) => {
   try {
-    await resend.emails.send({
-      from: 'Ava Shift <onboarding@resend.dev>',
+    console.log('Attempting to send availability update email to:', userEmail);
+    console.log('Email data:', { userName, role, availabilities });
+    
+    const result = await resend.emails.send({
+      from: 'Ava Shift <send@avashift.com>',
       to: userEmail,
       subject: 'Availability Update Confirmation',
       react: AvailabilityUpdateEmail({
@@ -60,8 +66,14 @@ export const sendAvailabilityUpdateEmail = async ({
         availabilities,
       }),
     });
+    
+    console.log('Email sent successfully:', result);
+    return result;
   } catch (error) {
-    console.error('Error sending availability update email:', error);
+    console.error('Detailed error sending availability update email:', {
+      error,
+      userData: { userName, userEmail, role },
+    });
     throw error;
   }
 };
@@ -83,7 +95,7 @@ export const sendStudentNoteEmail = async ({
 }) => {
   try {
     await resend.emails.send({
-      from: 'Ava Shift <onboarding@resend.dev>',
+      from: 'Ava Shift <send@avashift.com>',
       to: adminEmail,
       subject: `Student Note: ${studentName}`,
       react: StudentNoteEmail({
@@ -121,7 +133,7 @@ export const sendCancellationRequestEmail = async ({
 }) => {
   try {
     await resend.emails.send({
-      from: 'Ava Shift <onboarding@resend.dev>',
+      from: 'Ava Shift <send@avashift.com>',
       to: adminEmail,
       subject: 'New Shift Cancellation Request',
       react: CancellationRequestEmail({
@@ -160,7 +172,7 @@ export const sendRequestStatusUpdateEmail = async ({
 }) => {
   try {
     await resend.emails.send({
-      from: 'Ava Shift <onboarding@resend.dev>',
+      from: 'Ava Shift <send@avashift.com>',
       to: userEmail,
       subject: `Request ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}: ${requestType}`,
       react: RequestStatusUpdateEmail({

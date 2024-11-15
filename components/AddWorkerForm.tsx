@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -38,17 +37,8 @@ const formSchema = z.object({
 });
 
 const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-
-  // Get redirect path based on user role
-  const getRedirectPath = (role: string) => {
-    const paths = {
-      admin: '/a-projects',
-      client: '/c-projects',
-    };
-    return paths[role as keyof typeof paths] || '/projects';
-  };
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -62,15 +52,35 @@ const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setIsLoading(true);
+      setStatus('loading');
       await onSubmit(values);
-      
-      const redirectPath = getRedirectPath(user.role);
-      router.push(redirectPath);
-      router.refresh();
+      setStatus('success');
+      // Reset form after success
+      form.reset();
     } catch (error) {
       console.error('Error adding worker:', error);
+      setStatus('error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Add this helper function to determine button text
+  const getButtonText = () => {
+    switch (status) {
+      case 'loading':
+        return (
+          <>
+            <Loader2 size={20} className="animate-spin" /> &nbsp; 
+            Adding Worker...
+          </>
+        );
+      case 'success':
+        return "Worker Added Successfully!";
+      case 'error':
+        return "Failed to Add Worker - Try Again";
+      default:
+        return "Add Worker";
     }
   };
 
@@ -127,7 +137,7 @@ const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
                           <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className="bg-[#FFFFFF]">
                         <SelectItem value="student">Student</SelectItem>
                         <SelectItem value="shiftLeader">Shift Leader</SelectItem>
                         <SelectItem value="gateman">Security Guard</SelectItem>
@@ -160,7 +170,7 @@ const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
                           <SelectValue placeholder="Select project" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent className="max-h-[200px]">
+                      <SelectContent className="max-h-[200px] bg-[#FFFFFF]">
                         {projects.map((project) => (
                           <SelectItem key={project.projectId} value={project.projectId}>
                             {project.name}
@@ -181,16 +191,13 @@ const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
           <div className="payment-transfer_btn-box">
             <Button
               type="submit"
-              disabled={isLoading}
-              className="payment-transfer_btn">
-              {isLoading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" /> &nbsp; 
-                  Adding Worker...
-                </>
-              ) : (
-                "Add Worker"
-              )}
+              disabled={isLoading || status === 'success'}
+              className={`payment-transfer_btn ${
+                status === 'success' ? 'bg-green-600' : 
+                status === 'error' ? 'bg-red-600' : ''
+              }`}
+            >
+              {getButtonText()}
             </Button>
           </div>
         </form>

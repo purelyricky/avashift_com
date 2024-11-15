@@ -49,32 +49,30 @@ export async function getTodayShifts(studentId: string): Promise<ShiftWithDetail
       // Get current date in YYYY-MM-DD format
       const today = new Date().toISOString().split('T')[0];
       
-      // Get student's project memberships
-      const memberships = await database.listDocuments(
+      // Get student's assignments first
+      const assignments = await database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
+        process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
         [
-          Query.equal("userId", studentId),
-          Query.equal("status", "active"),
-          Query.equal("membershipType", "student")
+          Query.equal("studentId", [studentId]),
+          Query.equal("status", ["assigned", "confirmed"])
         ]
       );
-  
-      if (memberships.documents.length === 0) return [];
-      const projectIds = memberships.documents.map(m => m.projectId);
-  
-      // Get shifts for current date AND any shifts that the student has clocked in but not out yet
+
+      if (assignments.documents.length === 0) return [];
+      const shiftIds = assignments.documents.map(a => a.shiftId);
+
+      // Get shifts that are assigned to the student
       const shifts = await database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
         process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
         [
-          Query.equal("projectId", projectIds),
+          Query.equal("shiftId", shiftIds),
           Query.equal("status", "published"),
         ]
       );
   
       if (shifts.documents.length === 0) return [];
-      const shiftIds = shifts.documents.map(s => s.shiftId);
   
       // Get attendance records to check clock in/out status
       const attendance = await database.listDocuments(
@@ -107,7 +105,7 @@ export async function getTodayShifts(studentId: string): Promise<ShiftWithDetail
       const projects = await database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
         process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
-        [Query.equal("projectId", projectIds)]
+        [Query.equal("projectId", shiftIds)]
       );
   
       const leaderIds = relevantShifts.map(s => s.shiftLeaderId);
@@ -453,7 +451,7 @@ export async function handleClockIn(studentId: string, shiftId: string): Promise
         [
           Query.equal("studentId", [studentId]),
           Query.equal("shiftId", [shiftId]),
-          Query.equal("status", "active"),
+          Query.equal("status", ["active", "used"]),
           Query.orderDesc("createdAt"),
           Query.limit(1)
         ]
@@ -466,9 +464,11 @@ export async function handleClockIn(studentId: string, shiftId: string): Promise
         };
       }
   
+      const isRead = verificationCodes.documents[0].isRead;
+  
       return {
-        isVerified: verificationCodes.documents[0].isRead,
-        message: verificationCodes.documents[0].isRead ? 
+        isVerified: isRead,
+        message: isRead ? 
           "Verification code has been verified" : 
           "Waiting for verification"
       };

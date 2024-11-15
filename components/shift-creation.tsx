@@ -33,7 +33,9 @@ interface Shift {
   workers: number
   type: "day" | "night"
   leader: string
+  leaderName: string
   securityGuard: string
+  securityGuardName: string
   shiftType: "normal" | "filler"
   shiftId: string
 }
@@ -63,7 +65,9 @@ export function ShiftManagementComponent({ user }: { user: ShiftManagementUser }
     workers: 1,
     type: "day",
     leader: "",
+    leaderName: "",
     securityGuard: "",
+    securityGuardName: "",
     shiftType: "normal",
     shiftId: "",
   })
@@ -219,7 +223,9 @@ export function ShiftManagementComponent({ user }: { user: ShiftManagementUser }
               workers: 1,
               type: "day",
               leader: "",
+              leaderName: "",
               securityGuard: "",
+              securityGuardName: "",
               shiftType: "normal",
               shiftId: "",
             })
@@ -732,10 +738,10 @@ export function ShiftManagementComponent({ user }: { user: ShiftManagementUser }
                           <TableCell className="text-14 text-gray-900">{shift.type} shift</TableCell>
                           <TableCell className="text-14 text-gray-900">{shift.shiftType} shift</TableCell>
                           <TableCell className="text-14 text-gray-900">
-                            {shiftLeaders.find(l => l.id === shift.leader)?.name || shift.leader}
+                            {shift.leaderName}
                           </TableCell>
                           <TableCell className="text-14 text-gray-900">
-                            {securityGuards.find(g => g.id === shift.securityGuard)?.name || shift.securityGuard}
+                            {shift.securityGuardName}
                           </TableCell>
                           <TableCell>
                             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
