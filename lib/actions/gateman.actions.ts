@@ -182,17 +182,30 @@ export async function getUpcomingShifts(gatemanId: string): Promise<GatemanShift
   const { database } = await createAdminClient();
   
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date();
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    tomorrowStart.setHours(0, 0, 0, 0);
 
-    // Get upcoming shifts
+    // First get the shift assignments for this gateman
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal('gatemanId', [gatemanId]),
+        Query.equal('status', ['assigned', 'confirmed'])
+      ]
+    );
+
+    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
+    if (assignedShiftIds.length === 0) return [];
+
+    // Then get the shifts that match these assignments
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('gatemanId', [gatemanId]),
-        Query.greaterThanEqual('date', tomorrow.toISOString().split('T')[0]),
+        Query.equal('shiftId', assignedShiftIds),
+        Query.greaterThanEqual('date', tomorrowStart.toISOString()),
         Query.equal('status', ['published'])
       ]
     );
@@ -200,26 +213,26 @@ export async function getUpcomingShifts(gatemanId: string): Promise<GatemanShift
     // Get assignments for each shift
     const result: GatemanShift[] = await Promise.all(
       shifts.documents.map(async (shift) => {
-        const assignments = await database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-          [
-            Query.equal('shiftId', [shift.shiftId]),
-            Query.equal('status', ['assigned', 'confirmed'])
-          ]
-        );
-
-        // Check for pending cancellation request
-        const cancelRequests = await database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_ADMIN_REQUESTS_COLLECTION_ID!,
-          [
-            Query.equal('requestType', ['shiftCancellation']),
-            Query.equal('shiftId', [shift.shiftId]),
-            Query.equal('requesterId', [gatemanId]),
-            Query.equal('status', ['pending'])
-          ]
-        );
+        const [assignments, cancelRequests] = await Promise.all([
+          database.listDocuments(
+            process.env.APPWRITE_DATABASE_ID!,
+            process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+            [
+              Query.equal('shiftId', [shift.shiftId]),
+              Query.equal('status', ['assigned', 'confirmed'])
+            ]
+          ),
+          database.listDocuments(
+            process.env.APPWRITE_DATABASE_ID!,
+            process.env.APPWRITE_ADMIN_REQUESTS_COLLECTION_ID!,
+            [
+              Query.equal('requestType', ['shiftCancellation']),
+              Query.equal('shiftId', [shift.shiftId]),
+              Query.equal('requesterId', [gatemanId]),
+              Query.equal('status', ['pending'])
+            ]
+          )
+        ]);
 
         return {
           id: shift.shiftId,
@@ -252,17 +265,34 @@ export async function getCompletedShifts(gatemanId: string): Promise<GatemanShif
   const { database } = await createAdminClient();
   
   try {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStart = new Date();
+    sevenDaysAgoStart.setDate(sevenDaysAgoStart.getDate() - 7);
+    sevenDaysAgoStart.setHours(0, 0, 0, 0);
     
-    // Get completed shifts from last 7 days
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // First get the shift assignments for this gateman
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal('gatemanId', [gatemanId]),
+        Query.equal('status', ['assigned', 'confirmed'])
+      ]
+    );
+
+    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
+    if (assignedShiftIds.length === 0) return [];
+
+    // Then get the completed shifts that match these assignments
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('gatemanId', [gatemanId]),
-        Query.greaterThanEqual('date', sevenDaysAgo.toISOString().split('T')[0]),
-        Query.lessThanEqual('date', new Date().toISOString().split('T')[0]),
+        Query.equal('shiftId', assignedShiftIds),
+        Query.greaterThanEqual('date', sevenDaysAgoStart.toISOString()),
+        Query.lessThanEqual('date', todayEnd.toISOString()),
         Query.equal('status', ['completed'])
       ]
     );
@@ -401,85 +431,88 @@ export async function submitShiftCancellation(
 
 // Get today's active shifts for the gateman
 export async function getTodayActiveShifts(gatemanId: string): Promise<TodayActiveShift[]> {
-    const { database } = await createAdminClient();
-    const now = new Date();
+  const { database } = await createAdminClient();
+  const now = new Date();
+  
+  try {
+    // Set up proper timestamp range for today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
     
-    try {
-      // Get today's date in YYYY-MM-DD format
-      const today = formatDate(now.toISOString());
-      
-      // Get all shifts for today where gateman is assigned
-      const shifts = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-        [
-          Query.equal('gatemanId', [gatemanId]),
-          Query.equal('date', [today]),
-          Query.equal('status', ['published'])
-        ]
-      );
-  
-      // For each shift, get attendance records that are marked present
-      const activeShifts = await Promise.all(
-        shifts.documents.map(async (shift) => {
-          const attendance = await database.listDocuments(
-            process.env.APPWRITE_DATABASE_ID!,
-            process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
-            [
-              Query.equal('shiftId', [shift.shiftId]),
-              Query.equal('clockInVerifiedBy', [gatemanId]),
-              Query.equal('attendanceStatus', ['pending']),
-              Query.isNotNull('clockInTime'),
-              Query.isNull('clockOutTime')
-            ]
-          );
-  
-          // Only process shifts with active attendance
-          return Promise.all(
-            attendance.documents.map(async (record) => {
-              // Get student info
-              const student = await database.listDocuments(
+    // Get all shifts for today where gateman is assigned
+    const shifts = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      [
+        Query.equal('gatemanId', [gatemanId]),
+        Query.greaterThanEqual('date', todayStart.toISOString()),
+        Query.lessThanEqual('date', todayEnd.toISOString()),
+        Query.equal('status', ['published'])
+      ]
+    );
+
+    // For each shift, get attendance records that are marked present
+    const activeShifts = await Promise.all(
+      shifts.documents.map(async (shift) => {
+        const attendance = await database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
+          [
+            Query.equal('shiftId', [shift.shiftId]),
+            Query.equal('clockInVerifiedBy', [gatemanId]),
+            Query.equal('attendanceStatus', ['pending']),
+            Query.isNotNull('clockInTime'),
+            Query.isNull('clockOutTime')
+          ]
+        );
+
+        // Only process shifts with active attendance
+        return Promise.all(
+          attendance.documents.map(async (record) => {
+            const [student, project] = await Promise.all([
+              database.listDocuments(
                 process.env.APPWRITE_DATABASE_ID!,
                 process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
                 [Query.equal('userId', [record.studentId])]
-              );
-  
-              // Get project info
-              const project = await database.listDocuments(
+              ),
+              database.listDocuments(
                 process.env.APPWRITE_DATABASE_ID!,
                 process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
                 [Query.equal('projectId', [shift.projectId])]
-              );
-  
-              const endTime = new Date(shift.stopTime);
-              
-              // Only include if shift hasn't ended yet
-              if (endTime > now) {
-                return {
-                  studentName: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
-                  projectName: project.documents[0].name,
-                  time: `${new Date(shift.startTime).toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                  })} - ${new Date(shift.stopTime).toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                  })}`,
-                  endTime
-                };
-              }
-              return null;
-            })
-          );
-        })
-      );
-  
-      // Flatten and filter out null values
-      return activeShifts.flat().filter((shift): shift is TodayActiveShift => shift !== null);
-    } catch (error) {
-      console.error('Error getting today\'s active shifts:', error);
-      return [];
+              )
+            ]);
+
+            const endTime = new Date(shift.stopTime);
+            
+            // Only include if shift hasn't ended yet
+            if (endTime > now) {
+              return {
+                studentName: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
+                projectName: project.documents[0].name,
+                time: `${new Date(shift.startTime).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })} - ${new Date(shift.stopTime).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}`,
+                endTime
+              };
+            }
+            return null;
+          })
+        );
+      })
+    );
+
+    return activeShifts.flat().filter((shift): shift is TodayActiveShift => shift !== null);
+  } catch (error) {
+    console.error('Error getting today\'s active shifts:', error);
+    return [];
   }
 }
+

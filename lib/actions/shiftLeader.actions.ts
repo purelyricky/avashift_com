@@ -51,75 +51,76 @@ function calculateNewRating(currentRating: number, leaderRating: number): number
 
 // Get today's students
 export async function getTodayStudents(leaderId: string): Promise<StudentShiftInfo[]> {
-    const { database } = await createAdminClient();
-    
-    try {
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+  const { database } = await createAdminClient();
   
-      // Get leader's shifts for today
-      const shifts = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-        [
-          Query.equal('shiftLeaderId', [leaderId]),
-          Query.greaterThanEqual('startTime', startOfDay),
-          Query.lessThanEqual('startTime', endOfDay)
-        ]
-      );
-  
-      const shiftIds = shifts.documents.map(shift => shift.shiftId);
-  
-      // Get assignments for these shifts
-      const assignments = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-        [
-          Query.equal('shiftId', shiftIds),
-          Query.equal('status', ['assigned', 'confirmed'])
-        ]
-      );
-  
-      // Get student details and attendance status
-      const students = await Promise.all(
-        assignments.documents.map(async (assignment) => {
-          const student = await database.listDocuments(
-            process.env.APPWRITE_DATABASE_ID!,
-            process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
-            [Query.equal('userId', [assignment.studentId])]
-          );
-  
-          // Find the corresponding shift to get project ID
-          const shift = shifts.documents.find(s => s.shiftId === assignment.shiftId);
-  
-          const attendance = await database.listDocuments(
-            process.env.APPWRITE_DATABASE_ID!,
-            process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
-            [
-              Query.equal('shiftId', [assignment.shiftId]),
-              Query.equal('studentId', [assignment.studentId])
-            ]
-          );
-  
-          return {
-            id: student.documents[0].userId,
-            name: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
-            clockedIn: attendance.documents.some(a => a.clockInTime !== null),
-            rating: student.documents[0].rating,
-            attendance: attendance.documents[0]?.attendanceStatus || null,
-            shiftId: shift?.shiftId || '', // Ensure it's the correct field
-            projectId: shift?.projectId || ''
-          };
-        })
-      );
-  
-      return students;
-    } catch (error) {
-      console.error('Error getting today\'s students:', error);
-      return [];
-    }
+  try {
+    // Get today's start and end in ISO format with time
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Get leader's shifts for today
+    const shifts = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      [
+        Query.equal('shiftLeaderId', [leaderId]),
+        Query.greaterThanEqual('date', todayStart.toISOString()),
+        Query.lessThanEqual('date', todayEnd.toISOString())
+      ]
+    );
+
+    const shiftIds = shifts.documents.map(shift => shift.shiftId);
+
+    // Get assignments for these shifts
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal('shiftId', shiftIds),
+        Query.equal('status', ['assigned', 'confirmed'])
+      ]
+    );
+
+    // Rest of the function remains the same...
+    const students = await Promise.all(
+      assignments.documents.map(async (assignment) => {
+        const student = await database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+          [Query.equal('userId', [assignment.studentId])]
+        );
+
+        const shift = shifts.documents.find(s => s.shiftId === assignment.shiftId);
+
+        const attendance = await database.listDocuments(
+          process.env.APPWRITE_DATABASE_ID!,
+          process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
+          [
+            Query.equal('shiftId', [assignment.shiftId]),
+            Query.equal('studentId', [assignment.studentId])
+          ]
+        );
+
+        return {
+          id: student.documents[0].userId,
+          name: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
+          clockedIn: attendance.documents.some(a => a.clockInTime !== null),
+          rating: student.documents[0].rating,
+          attendance: attendance.documents[0]?.attendanceStatus || null,
+          shiftId: shift?.shiftId || '',
+          projectId: shift?.projectId || ''
+        };
+      })
+    );
+
+    return students;
+  } catch (error) {
+    console.error('Error getting today\'s students:', error);
+    return [];
   }
+}
 
 // Update student attendance
 export async function updateStudentAttendance(
@@ -300,22 +301,34 @@ export async function getUpcomingShifts(leaderId: string): Promise<LeaderShift[]
   const { database } = await createAdminClient();
   
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date();
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    tomorrowStart.setHours(0, 0, 0, 0);
 
-    // Get upcoming shifts
+    // First get all assignments for this leader
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal('leaderId', [leaderId]),
+        Query.equal('status', ['assigned', 'confirmed'])
+      ]
+    );
+
+    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
+
+    // Get upcoming shifts that the leader is assigned to
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('shiftLeaderId', [leaderId]),
-        Query.greaterThanEqual('date', tomorrow.toISOString().split('T')[0]),
+        Query.equal('shiftId', assignedShiftIds),
+        Query.greaterThanEqual('date', tomorrowStart.toISOString()),
         Query.equal('status', ['published'])
       ]
     );
 
-    // Get assignments and attendance for each shift
+    // Rest of the function remains the same...
     const result = await Promise.all(
       shifts.documents.map(async (shift) => {
         const assignments = await database.listDocuments(
@@ -358,22 +371,38 @@ export async function getCompletedShifts(leaderId: string): Promise<LeaderShift[
   const { database } = await createAdminClient();
   
   try {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStart = new Date();
+    sevenDaysAgoStart.setDate(sevenDaysAgoStart.getDate() - 7);
+    sevenDaysAgoStart.setHours(0, 0, 0, 0);
     
-    // Get completed shifts from last 7 days
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // First get all assignments for this leader
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal('leaderId', [leaderId]),
+        Query.equal('status', ['assigned', 'confirmed'])
+      ]
+    );
+
+    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
+    
+    // Get completed shifts from last 7 days that the leader is assigned to
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('shiftLeaderId', [leaderId]),
-        Query.greaterThanEqual('date', sevenDaysAgo.toISOString().split('T')[0]),
-        Query.lessThanEqual('date', new Date().toISOString().split('T')[0]),
+        Query.equal('shiftId', assignedShiftIds),
+        Query.greaterThanEqual('date', sevenDaysAgoStart.toISOString()),
+        Query.lessThanEqual('date', todayEnd.toISOString()),
         Query.equal('status', ['completed'])
       ]
     );
 
-    // Get assignments and attendance for each shift
+    // Rest of the function remains the same...
     const result = await Promise.all(
       shifts.documents.map(async (shift) => {
         const [assignments, attendance] = await Promise.all([

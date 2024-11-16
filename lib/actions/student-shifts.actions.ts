@@ -5,6 +5,7 @@
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/actions/appwrite";
 import { ID } from "node-appwrite";
+import { sendCancellationRequestEmail } from "../emails";
 
 // Type Definitions
 interface ShiftWithDetails {
@@ -43,113 +44,115 @@ function generateQRCode(): string {
 
 // Get today's shifts for the logged-in student
 export async function getTodayShifts(studentId: string): Promise<ShiftWithDetails[]> {
-    const { database } = await createAdminClient();
+  const { database } = await createAdminClient();
+  
+  try {
+    // Get today's start and end in ISO format with time
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
     
-    try {
-      // Get current date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
+    // Get student's assignments first
+    const assignments = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
+      [
+        Query.equal("studentId", [studentId]),
+        Query.equal("status", ["assigned", "confirmed"])
+      ]
+    );
+
+    if (assignments.documents.length === 0) return [];
+    const shiftIds = assignments.documents.map(a => a.shiftId);
+
+    // Get shifts that are assigned to the student and are today
+    const shifts = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      [
+        Query.equal("shiftId", shiftIds),
+        Query.equal("status", "published"),
+        Query.greaterThanEqual("date", todayStart.toISOString()),
+        Query.lessThanEqual("date", todayEnd.toISOString())
+      ]
+    );
+
+    if (shifts.documents.length === 0) return [];
+
+    // Get attendance records to check clock in/out status
+    const attendance = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
+      [
+        Query.equal("shiftId", shiftIds),
+        Query.equal("studentId", studentId)
+      ]
+    );
+
+    // Filter shifts based on attendance status only (date filtering is now done at DB level)
+    const relevantShifts = shifts.documents.filter(shift => {
+      const attendanceRecord = attendance.documents.find(a => a.shiftId === shift.shiftId);
       
-      // Get student's assignments first
-      const assignments = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-        [
-          Query.equal("studentId", [studentId]),
-          Query.equal("status", ["assigned", "confirmed"])
-        ]
+      return (
+        // Include today's shifts without clock out
+        !attendanceRecord?.clockOutTime ||
+        // Include any shift with clock in but no clock out (regardless of date)
+        (attendanceRecord?.clockInTime && !attendanceRecord?.clockOutTime)
       );
+    });
 
-      if (assignments.documents.length === 0) return [];
-      const shiftIds = assignments.documents.map(a => a.shiftId);
+    if (relevantShifts.length === 0) return [];
 
-      // Get shifts that are assigned to the student
-      const shifts = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-        [
-          Query.equal("shiftId", shiftIds),
-          Query.equal("status", "published"),
-        ]
-      );
-  
-      if (shifts.documents.length === 0) return [];
-  
-      // Get attendance records to check clock in/out status
-      const attendance = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_ATTENDANCE_COLLECTION_ID!,
-        [
-          Query.equal("shiftId", shiftIds),
-          Query.equal("studentId", studentId)
-        ]
-      );
-  
-      // Filter shifts based on our conditions:
-      // 1. Shift date matches today OR
-      // 2. Shift has clock in but no clock out
-      const relevantShifts = shifts.documents.filter(shift => {
-        const shiftDate = shift.date.split('T')[0];
-        const attendanceRecord = attendance.documents.find(a => a.shiftId === shift.shiftId);
-  
-        return (
-          // Today's shifts that haven't been clocked out
-          (shiftDate === today && (!attendanceRecord?.clockOutTime)) ||
-          // Any shift that's clocked in but not out (regardless of date)
-          (attendanceRecord?.clockInTime && !attendanceRecord?.clockOutTime)
-        );
-      });
-  
-      if (relevantShifts.length === 0) return [];
-  
-      // Get additional data needed for display
-      const projects = await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
-        [Query.equal("projectId", shiftIds)]
-      );
-  
-      const leaderIds = relevantShifts.map(s => s.shiftLeaderId);
-      const leaders = leaderIds.length > 0 ? await database.listDocuments(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
-        [Query.equal("userId", leaderIds)]
-      ) : { documents: [] };
-  
-      // Process and return the filtered shifts
-      return relevantShifts.map(shift => {
-        const project = projects.documents.find(p => p.projectId === shift.projectId);
-        const leader = leaders.documents.find(l => l.userId === shift.shiftLeaderId);
-        const attendanceRecord = attendance.documents.find(a => a.shiftId === shift.shiftId);
-  
-        let status: "notStarted" | "clockedIn" | "completed" = "notStarted";
-        if (attendanceRecord?.clockInTime && !attendanceRecord?.clockOutTime) {
-          status = "clockedIn";
-        } else if (attendanceRecord?.clockOutTime) {
-          status = "completed";
-        }
-  
-        return {
-          shiftId: shift.shiftId,
-          projectId: shift.projectId,
-          projectName: project?.name || "Unknown Project",
-          date: shift.date.split('T')[0],
-          startTime: formatTime(shift.startTime),
-          stopTime: formatTime(shift.stopTime),
-          status,
-          actualStart: attendanceRecord?.clockInTime ? formatTime(attendanceRecord.clockInTime) : null,
-          actualStop: attendanceRecord?.clockOutTime ? formatTime(attendanceRecord.clockOutTime) : null,
-          leaderName: leader ? `${leader.firstName} ${leader.lastName}` : "Unknown Leader",
-          attendanceId: attendanceRecord?.$id,
-          qrCode: attendanceRecord?.qrCode,
-          isRead: attendanceRecord?.isRead
-        };
-      });
-  
-    } catch (error) {
-      console.error("Error fetching today's shifts:", error);
-      return [];
-    }
+    // Get additional data needed for display
+    const projects = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+      [Query.equal("projectId", relevantShifts.map(s => s.projectId))]
+    );
+
+    const leaderIds = relevantShifts.map(s => s.shiftLeaderId);
+    const leaders = leaderIds.length > 0 ? await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
+      [Query.equal("userId", leaderIds)]
+    ) : { documents: [] };
+
+    // Process and return the filtered shifts
+    return relevantShifts.map(shift => {
+      const project = projects.documents.find(p => p.projectId === shift.projectId);
+      const leader = leaders.documents.find(l => l.userId === shift.shiftLeaderId);
+      const attendanceRecord = attendance.documents.find(a => a.shiftId === shift.shiftId);
+
+      let status: "notStarted" | "clockedIn" | "completed" = "notStarted";
+      if (attendanceRecord?.clockInTime && !attendanceRecord?.clockOutTime) {
+        status = "clockedIn";
+      } else if (attendanceRecord?.clockOutTime) {
+        status = "completed";
+      }
+
+      return {
+        shiftId: shift.shiftId,
+        projectId: shift.projectId,
+        projectName: project?.name || "Unknown Project",
+        date: shift.date.split('T')[0],
+        startTime: formatTime(shift.startTime),
+        stopTime: formatTime(shift.stopTime),
+        status,
+        actualStart: attendanceRecord?.clockInTime ? formatTime(attendanceRecord.clockInTime) : null,
+        actualStop: attendanceRecord?.clockOutTime ? formatTime(attendanceRecord.clockOutTime) : null,
+        leaderName: leader ? `${leader.firstName} ${leader.lastName}` : "Unknown Leader",
+        attendanceId: attendanceRecord?.$id,
+        verificationCode: attendanceRecord?.verificationCode,
+        isVerified: attendanceRecord?.isVerified
+      };
+    });
+
+  } catch (error) {
+    console.error("Error fetching today's shifts:", error);
+    return [];
   }
+}
   
   
 
@@ -158,9 +161,9 @@ export async function getUpcomingShifts(studentId: string): Promise<ShiftWithDet
   const { database } = await createAdminClient();
   
   try {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date();
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    tomorrowStart.setHours(0, 0, 0, 0);
 
     // Get assignments for the student
     const assignments = await database.listDocuments(
@@ -174,18 +177,18 @@ export async function getUpcomingShifts(studentId: string): Promise<ShiftWithDet
 
     if (assignments.documents.length === 0) return [];
 
-    // Get shifts
+    // Get shifts with proper timestamp handling
     const shiftIds = assignments.documents.map(a => a.shiftId);
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
         Query.equal("shiftId", shiftIds),
-        Query.greaterThan("date", tomorrow.toISOString().split('T')[0])
+        Query.greaterThanEqual("date", tomorrowStart.toISOString())
       ]
     );
 
-    // Get projects and leaders data (similar to getTodayShifts)
+    // Get projects and leaders data
     const projectIds = Array.from(new Set(shifts.documents.map(s => s.projectId)));
     const projects = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
@@ -204,7 +207,7 @@ export async function getUpcomingShifts(studentId: string): Promise<ShiftWithDet
       shiftId: shift.shiftId,
       projectId: shift.projectId,
       projectName: projects.documents.find(p => p.projectId === shift.projectId)?.name || "Unknown Project",
-      date: formatDate(shift.date), // Format the date
+      date: formatDate(shift.date),
       startTime: formatTime(shift.startTime),
       stopTime: formatTime(shift.stopTime),
       status: "notStarted",
@@ -226,6 +229,14 @@ export async function getCompletedShifts(studentId: string): Promise<ShiftWithDe
   const { database } = await createAdminClient();
   
   try {
+    // Use proper timestamp for date comparisons
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     // Get completed assignments
     const assignments = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
@@ -245,7 +256,11 @@ export async function getCompletedShifts(studentId: string): Promise<ShiftWithDe
       database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
         process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-        [Query.equal("shiftId", shiftIds)]
+        [
+          Query.equal("shiftId", shiftIds),
+          Query.greaterThanEqual("date", sevenDaysAgo.toISOString()),
+          Query.lessThanEqual("date", todayEnd.toISOString())
+        ]
       ),
       database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
@@ -283,7 +298,7 @@ export async function getCompletedShifts(studentId: string): Promise<ShiftWithDe
         shiftId: shift.shiftId,
         projectId: shift.projectId,
         projectName: project?.name || "Unknown Project",
-        date: formatDate(shift.date), // Format the date
+        date: formatDate(shift.date),
         startTime: formatTime(shift.startTime),
         stopTime: formatTime(shift.stopTime),
         status: "completed",
@@ -300,73 +315,102 @@ export async function getCompletedShifts(studentId: string): Promise<ShiftWithDe
 
 // Get available filler shifts
 export async function getFillerShifts(studentId: string): Promise<ShiftWithDetails[]> {
-    const { database } = await createAdminClient();
+  const { database } = await createAdminClient();
+  
+  try {
+    // 1. Get student's project memberships
+    const memberships = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
+      [
+        Query.equal("userId", [studentId]),
+        Query.equal("membershipType", ["student"]),
+        Query.equal("status", ["active"])
+      ]
+    );
+
+    if (memberships.documents.length === 0) return [];
     
-    try {
-      const memberships = await database.listDocuments(
+    const projectIds = memberships.documents.map(m => m.projectId);
+
+    // 2. Get all filler shifts from student's projects
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // First get all published filler shifts
+    const shifts = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      [
+        Query.equal("projectId", projectIds),
+        Query.equal("shiftType", ["filler"]),
+        Query.equal("status", ["published"]),
+        Query.greaterThanEqual("date", today.toISOString())
+      ]
+    );
+
+    if (shifts.documents.length === 0) return [];
+
+    // Filter shifts where assignedCount < requiredStudents in memory
+    const availableShifts = shifts.documents.filter(shift => 
+      parseInt(shift.assignedCount) < parseInt(shift.requiredStudents)
+    );
+
+    if (availableShifts.length === 0) return [];
+
+    // 3. Filter out shifts that student has already applied for
+    const existingApplications = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_ADMIN_REQUESTS_COLLECTION_ID!,
+      [
+        Query.equal("requestType", ["fillerShiftApplication"]),
+        Query.equal("requesterId", [studentId]),
+        Query.equal("status", ["pending", "approved"]),
+        Query.equal("shiftId", availableShifts.map(s => s.shiftId))
+      ]
+    );
+
+    const appliedShiftIds = new Set(existingApplications.documents.map(a => a.shiftId));
+    const finalShifts = availableShifts.filter(shift => !appliedShiftIds.has(shift.shiftId));
+
+    if (finalShifts.length === 0) return [];
+
+    // 4. Get additional data for display
+    const [projects, leaders] = await Promise.all([
+      database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
-        [
-          Query.equal("userId", studentId),
-          Query.equal("status", "active"),
-          Query.equal("membershipType", "student")
-        ]
-      );
-  
-      if (memberships.documents.length === 0) return [];
-      const projectIds = memberships.documents.map(m => m.projectId);
-  
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-  
-      const shifts = await database.listDocuments(
+        process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+        [Query.equal("projectId", finalShifts.map(s => s.projectId))]
+      ),
+      database.listDocuments(
         process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
-        [
-          Query.equal("projectId", projectIds),
-          Query.equal("shiftType", "filler"),
-          Query.greaterThanEqual("date", today.toISOString().split('T')[0]),
-          Query.equal("status", "published"),
-          Query.lessThan("assignedCount", "requiredStudents")
-        ]
-      );
-  
-      if (shifts.documents.length === 0) return [];
-      const leaderIds = shifts.documents.map(s => s.shiftLeaderId);
-  
-      const [projects, leaders] = await Promise.all([
-        database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
-          [Query.equal("projectId", projectIds)]
-        ),
-        leaderIds.length > 0 ? database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
-          [Query.equal("userId", leaderIds)]
-        ) : { documents: [] }
-      ]);
-  
-      return shifts.documents.map(shift => ({
-        shiftId: shift.shiftId,
-        projectId: shift.projectId,
-        projectName: projects.documents.find(p => p.projectId === shift.projectId)?.name || "Unknown Project",
-        date: formatDate(shift.date), // Format the date
-        startTime: formatTime(shift.startTime),
-        stopTime: formatTime(shift.stopTime),
-        status: "notStarted",
-        actualStart: null,
-        actualStop: null,
-        leaderName: (() => {
-          const leader = leaders.documents.find(l => l.userId === shift.shiftLeaderId);
-          return leader ? `${leader.firstName} ${leader.lastName}` : "Unknown Leader";
-        })()
-      }));
-    } catch (error) {
-      console.error("Error fetching filler shifts:", error);
-      return [];
-    }
+        process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
+        [Query.equal("userId", finalShifts.map(s => s.shiftLeaderId))]
+      )
+    ]);
+
+    // 5. Format and return the shifts
+    return finalShifts.map(shift => ({
+      shiftId: shift.shiftId,
+      projectId: shift.projectId,
+      projectName: projects.documents.find(p => p.projectId === shift.projectId)?.name || "Unknown Project",
+      date: formatDate(shift.date),
+      startTime: formatTime(shift.startTime),
+      stopTime: formatTime(shift.stopTime),
+      status: "notStarted" as const,
+      actualStart: null,
+      actualStop: null,
+      leaderName: (() => {
+        const leader = leaders.documents.find(l => l.userId === shift.shiftLeaderId);
+        return leader ? `${leader.firstName} ${leader.lastName}` : "Unknown Leader";
+      })()
+    }));
+
+  } catch (error) {
+    console.error("Error fetching filler shifts:", error);
+    return [];
   }
+}
 
 // Helper function to generate a unique 4-character code
 function generateVerificationCode(): string {
@@ -665,6 +709,31 @@ export async function createShiftCancellationRequest({
       };
     }
 
+    // Get the shift details to find the project
+    const shift = await database.getDocument(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      shiftId
+    );
+
+    // Get project admin information
+    const projectAdmins = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECT_MEMBERS_COLLECTION_ID!,
+      [
+        Query.equal("projectId", [shift.projectId]),
+        Query.equal("membershipType", ["admin"]),
+        Query.equal("status", ["active"])
+      ]
+    );
+
+    // Get student information
+    const student = await database.getDocument(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+      studentId
+    );
+
     // Get the assignment ID
     const assignment = await getShiftAssignment(shiftId, studentId);
     if (!assignment) {
@@ -693,6 +762,25 @@ export async function createShiftCancellationRequest({
         createdAt: new Date().toISOString()
       }
     );
+
+    // Send email notification to each project admin
+    for (const admin of projectAdmins.documents) {
+      try {
+        await sendCancellationRequestEmail({
+          adminName: `${admin.firstName} ${admin.lastName}`,
+          adminEmail: admin.email,
+          requesterName: `${student.firstName} ${student.lastName}`,
+          requesterRole: "student",
+          projectName: shift.projectName,
+          shiftDate: formatDate(shift.date),
+          shiftTime: shift.timeType === 'day' ? 'Day Shift' : 'Night Shift',
+          reason
+        });
+      } catch (emailError) {
+        console.error("Error sending cancellation request email:", emailError);
+        // Continue with request creation even if email fails
+      }
+    }
 
     return {
       success: true,

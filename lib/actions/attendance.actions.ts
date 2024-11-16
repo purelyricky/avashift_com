@@ -11,6 +11,8 @@ interface VerificationData {
   timestamp: string;
 }
 
+
+
 interface AttendanceData {
   shiftId: string;
   studentId: string;
