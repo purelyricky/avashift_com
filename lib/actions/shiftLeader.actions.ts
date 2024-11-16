@@ -3,7 +3,7 @@
 
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/actions/appwrite";
-import { sendStudentNoteEmail } from '@/lib/emails';
+import { sendCancellationRequestEmail, sendStudentNoteEmail } from '@/lib/emails';
 // Type definitions
 interface StudentShiftInfo {
   id: string;
@@ -182,77 +182,106 @@ export async function updateStudentAttendance(
   }
 
 
-// Add student comment (now only handles comments, no ratings)
+// Add student comment
 export async function addStudentComment(
     studentId: string,
     shiftId: string,
     projectId: string,
     comment: string,
     leaderId: string
-  ): Promise<boolean> {
+): Promise<boolean> {
     const { database } = await createAdminClient();
     
     try {
-      // Create the feedback document
-      const feedbackId = ID.unique();
-      await database.createDocument(
-        process.env.APPWRITE_DATABASE_ID!,
-        process.env.APPWRITE_FEEDBACK_COLLECTION_ID!,
-        feedbackId,
-        {
-          feedbackId,
-          studentId,
-          shiftId,
-          projectId,
-          comments: comment,
-          submittedBy: leaderId,
-          createdAt: new Date().toISOString(),
-          isRead: false
+        // Create the feedback document
+        const feedbackId = ID.unique();
+        await database.createDocument(
+            process.env.APPWRITE_DATABASE_ID!,
+            process.env.APPWRITE_FEEDBACK_COLLECTION_ID!,
+            feedbackId,
+            {
+                feedbackId,
+                studentId,
+                shiftId,
+                projectId,
+                comments: comment,
+                submittedBy: leaderId,
+                createdAt: new Date().toISOString(),
+                isRead: false
+            }
+        );
+
+        // Get all the necessary information for the email
+        const [student, project, leader, shift] = await Promise.all([
+            // Get student details
+            database.listDocuments(
+                process.env.APPWRITE_DATABASE_ID!,
+                process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
+                [Query.equal('userId', [studentId])]
+            ),
+            // Get project details
+            database.listDocuments(
+                process.env.APPWRITE_DATABASE_ID!,
+                process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+                [Query.equal('projectId', [projectId])]
+            ),
+            // Get leader details - Changed from USERS to SHIFT_LEADERS collection
+            database.listDocuments(
+                process.env.APPWRITE_DATABASE_ID!,
+                process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
+                [Query.equal('userId', [leaderId])]
+            ),
+            // Get shift details
+            database.listDocuments(
+                process.env.APPWRITE_DATABASE_ID!,
+                process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+                [Query.equal('shiftId', [shiftId])]
+            )
+        ]);
+
+        // Get the admin who created the shift or project owner
+        const admins = await database.listDocuments(
+            process.env.APPWRITE_DATABASE_ID!,
+            process.env.APPWRITE_ADMINS_COLLECTION_ID!,
+            [Query.equal('userId', [
+                shift.documents[0].createdBy, // Try shift creator first
+                project.documents[0].ownerId  // Or project owner as fallback
+            ])]
+        );
+
+        if (admins.documents.length > 0) {
+            console.log("Sending student note email to admin:", admins.documents[0].email);
+            
+            // Format the date properly from the shift data
+            const shiftDate = new Date(shift.documents[0].date).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+
+            // Send email to admin
+            await sendStudentNoteEmail({
+                adminName: admins.documents[0].firstName + ' ' + admins.documents[0].lastName,
+                adminEmail: admins.documents[0].email,
+                studentName: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
+                projectName: project.documents[0].name,
+                leaderName: leader.documents[0].firstName + ' ' + leader.documents[0].lastName,
+                note: comment,
+                shiftDate: shiftDate,  // Now properly formatted
+            });
+
+            console.log("Student note email sent successfully");
+        } else {
+            console.log("No admin found for shift/project");
         }
-      );
 
-      // Get additional information needed for the email
-      const [student, project, leader, admin] = await Promise.all([
-        database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_STUDENTS_COLLECTION_ID!,
-          [Query.equal('userId', [studentId])]
-        ),
-        database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
-          [Query.equal('projectId', [projectId])]
-        ),
-        database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_USERS_COLLECTION_ID!,
-          [Query.equal('userId', [leaderId])]
-        ),
-        database.listDocuments(
-          process.env.APPWRITE_DATABASE_ID!,
-          process.env.APPWRITE_USERS_COLLECTION_ID!,
-          [Query.equal('role', ['admin'])]
-        )
-      ]);
-
-      // Send email to admin
-      if (admin.documents.length > 0) {
-        await sendStudentNoteEmail({
-          adminName: admin.documents[0].name,
-          adminEmail: admin.documents[0].email,
-          studentName: `${student.documents[0].firstName} ${student.documents[0].lastName}`,
-          projectName: project.documents[0].name,
-          leaderName: leader.documents[0].name,
-          note: comment
-        });
-      }
-  
-      return true;
+        return true;
     } catch (error) {
-      console.error('Error adding comment:', error);
-      return false;
+        console.error('Error adding comment:', error);
+        return false;
     }
-  }
+}
   
   // Separate function for updating student rating
 export async function updateStudentRating(
@@ -305,30 +334,18 @@ export async function getUpcomingShifts(leaderId: string): Promise<LeaderShift[]
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     tomorrowStart.setHours(0, 0, 0, 0);
 
-    // First get all assignments for this leader
-    const assignments = await database.listDocuments(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-      [
-        Query.equal('leaderId', [leaderId]),
-        Query.equal('status', ['assigned', 'confirmed'])
-      ]
-    );
-
-    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
-
-    // Get upcoming shifts that the leader is assigned to
+    // First get all shifts where this leader is assigned
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('shiftId', assignedShiftIds),
+        Query.equal('shiftLeaderId', [leaderId]),
         Query.greaterThanEqual('date', tomorrowStart.toISOString()),
         Query.equal('status', ['published'])
       ]
     );
 
-    // Rest of the function remains the same...
+    // Get assignments for these shifts
     const result = await Promise.all(
       shifts.documents.map(async (shift) => {
         const assignments = await database.listDocuments(
@@ -378,24 +395,12 @@ export async function getCompletedShifts(leaderId: string): Promise<LeaderShift[
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
     
-    // First get all assignments for this leader
-    const assignments = await database.listDocuments(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-      [
-        Query.equal('leaderId', [leaderId]),
-        Query.equal('status', ['assigned', 'confirmed'])
-      ]
-    );
-
-    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
-    
-    // Get completed shifts from last 7 days that the leader is assigned to
+    // Get completed shifts where this leader was assigned
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('shiftId', assignedShiftIds),
+        Query.equal('shiftLeaderId', [leaderId]),
         Query.greaterThanEqual('date', sevenDaysAgoStart.toISOString()),
         Query.lessThanEqual('date', todayEnd.toISOString()),
         Query.equal('status', ['completed'])
@@ -501,7 +506,43 @@ export async function getShiftDetails(shiftId: string): Promise<ShiftDetails | n
   }
 }
 
-// Submit shift cancellation request
+// Helper function to get shift assigning admin
+async function getShiftAssigningAdmin(shiftId: string, leaderId: string) {
+  const { database } = await createAdminClient();
+  
+  try {
+    // Get shift details first
+    const shift = await database.getDocument(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+      shiftId
+    );
+
+    // Get project details to get owner ID
+    const project = await database.getDocument(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+      shift.projectId
+    );
+
+    // Check admins collection for shift creator or project owner
+    // Note: Query.equal with array values must be passed as an array of possible values
+    const admins = await database.listDocuments(
+      process.env.APPWRITE_DATABASE_ID!,
+      process.env.APPWRITE_ADMINS_COLLECTION_ID!,
+      [
+        Query.equal('userId', [shift.createdBy, project.ownerId])
+      ]
+    );
+
+    return admins.documents[0] || null;
+  } catch (error) {
+    console.error('Error getting assigning admin:', error);
+    return null;
+  }
+}
+
+// Modified submitShiftCancellation function
 export async function submitShiftCancellation(
     shiftId: string,
     leaderId: string,
@@ -510,6 +551,64 @@ export async function submitShiftCancellation(
     const { database } = await createAdminClient();
     
     try {
+      // Get shift details
+      const shift = await database.getDocument(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
+        shiftId
+      );
+
+      // Get project details
+      const project = await database.getDocument(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_PROJECTS_COLLECTION_ID!,
+        shift.projectId
+      );
+
+      // Get leader details
+      const leaders = await database.listDocuments(
+        process.env.APPWRITE_DATABASE_ID!,
+        process.env.APPWRITE_SHIFT_LEADERS_COLLECTION_ID!,
+        [Query.equal('userId', [leaderId])]
+      );
+
+      if (leaders.documents.length === 0) {
+        throw new Error('Leader not found');
+      }
+      const leader = leaders.documents[0];
+
+      // Get assigning admin
+      const admin = await getShiftAssigningAdmin(shiftId, leaderId);
+
+      if (admin) {
+        try {
+          // Format the date properly
+          const shiftDate = new Date(shift.date).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          await sendCancellationRequestEmail({
+            adminName: `${admin.firstName} ${admin.lastName}`,
+            adminEmail: admin.email,
+            requesterName: `${leader.firstName} ${leader.lastName}`,
+            requesterRole: 'shift leader',
+            projectName: project.name,
+            shiftDate: shiftDate,
+            shiftTime: shift.timeType === 'day' ? 'Day Shift' : 'Night Shift',
+            reason: reason
+          });
+
+          console.log('Cancellation request email sent successfully');
+        } catch (emailError) {
+          console.error('Error sending cancellation email:', emailError);
+          // Continue with request creation even if email fails
+        }
+      }
+
+      // Create the cancellation request
       const requestId = ID.unique();
       await database.createDocument(
         process.env.APPWRITE_DATABASE_ID!,

@@ -29,12 +29,12 @@ export function TopProjectStatsCard({ project, userRole }: ProjectCardProps) {
     datasets: [{
       data: [project.stats.studentsCount, project.stats.shiftLeadersCount],
       backgroundColor: [
-        'rgba(0, 0, 0, 0.8)',
-        'rgba(255, 255, 255, 0.8)',
+        '#E68C3A',
+        '#F4F2EF',
       ],
       borderColor: [
-        'rgba(0, 0, 0, 1)',
-        'rgba(255, 255, 255, 1)',
+        '#E68C3A',
+        '#F4F2EF',
       ],
       borderWidth: 1,
     }],
@@ -93,15 +93,19 @@ export function TopProjectStatsCard({ project, userRole }: ProjectCardProps) {
                   <div className="w-3 h-3 rounded-full bg-black mr-2"></div>
                   <div>
                     <p className="text-12 font-semibold text-white">
-                      Students: {project.stats.studentsCount}
+                      Students: 
+                      <br />
+                      {project.stats.studentsCount}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-white mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-black mr-2"></div>
                   <div>
                     <p className="text-12 font-semibold text-white">
-                      Leaders: {project.stats.shiftLeadersCount}
+                      Leaders: 
+                      <br />
+                      {project.stats.shiftLeadersCount}
                     </p>
                   </div>
                 </div>

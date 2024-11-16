@@ -4,6 +4,7 @@ import { ProjectAssignmentEmail } from '@/components/emails/ProjectAssignmentEma
 import { RequestStatusUpdateEmail } from '@/components/emails/RequestStatusUpdateEmail';
 import { StudentNoteEmail } from '@/components/emails/StudentNoteEmail';
 import { Resend } from 'resend';
+import { FillerShiftApplicationEmail } from '@/components/emails/FillerShiftApplicationEmail';
 
 if (!process.env.RESEND_API_KEY) {
   throw new Error('RESEND_API_KEY environment variable is not set');
@@ -85,6 +86,7 @@ export const sendStudentNoteEmail = async ({
   projectName,
   leaderName,
   note,
+  shiftDate,
 }: {
   adminName: string;
   adminEmail: string;
@@ -92,18 +94,21 @@ export const sendStudentNoteEmail = async ({
   projectName: string;
   leaderName: string;
   note: string;
+  shiftDate: string;
 }) => {
   try {
     await resend.emails.send({
       from: 'Ava Shift <send@avashift.com>',
       to: adminEmail,
-      subject: `Student Note: ${studentName}`,
+      subject: 'New Student Note from Shift Leader',
       react: StudentNoteEmail({
         adminName,
+        adminEmail,
         studentName,
         projectName,
         leaderName,
         note,
+        shiftDate,
       }),
     });
   } catch (error) {
@@ -185,6 +190,43 @@ export const sendRequestStatusUpdateEmail = async ({
     });
   } catch (error) {
     console.error('Error sending request status update email:', error);
+    throw error;
+  }
+};
+
+export const sendFillerShiftApplicationEmail = async ({
+  adminName,
+  adminEmail,
+  requesterName,
+  requesterRole,
+  projectName,
+  shiftDate,
+  shiftTime,
+}: {
+  adminName: string;
+  adminEmail: string;
+  requesterName: string;
+  requesterRole: string;
+  projectName: string;
+  shiftDate: string;
+  shiftTime: string;
+}) => {
+  try {
+    await resend.emails.send({
+      from: 'Ava Shift <send@avashift.com>',
+      to: adminEmail,
+      subject: 'New Filler Shift Application',
+      react: FillerShiftApplicationEmail({
+        adminName,
+        requesterName,
+        requesterRole,
+        projectName,
+        shiftDate,
+        shiftTime,
+      }),
+    });
+  } catch (error) {
+    console.error('Error sending filler shift application email:', error);
     throw error;
   }
 };

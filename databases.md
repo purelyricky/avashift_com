@@ -153,6 +153,7 @@ table: shifts
 - createdBy (string, 36) [Required]
 - createdAt (datetime) [Required]
 - updatedAt (datetime) [Required]
+- assignedId (string, 36) [nullable]
 
 # ASSIGNMENTS AND REQUESTS
 APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID: SHIFT_ASSIGNMENTS_COLLECTION_ID,
@@ -202,8 +203,6 @@ table: feedback
 - studentId (string, 36) [Foreign Key -> students.userId, Required]
 - shiftId (string, 36) [Foreign Key -> shifts.shiftId, Required]
 - projectId (string, 36) [Foreign Key -> projects.projectId, Required]
-- punctualityRating (double) [Required]
-- overallRating (double) [Required]
 - comments (string) [nullable]
 - submittedBy (string, 36) [Foreign Key -> shiftLeaders.userId, Required]
 - createdAt (datetime) [Required]

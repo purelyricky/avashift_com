@@ -323,7 +323,7 @@ export default function StyledWorkerTable({ userId }: StyledWorkerTableProps) {
       <div className="mb-8">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <h2 className="text-2xl font-bold text-[#344054]">All Users</h2>
-          <Link href="/a-invite">
+          <Link href="/a-invitations">
             <Button className="w-full sm:w-auto bg-white text-blue-600 border border-blue-600 hover:bg-blue-50">
               <Plus className="mr-2 h-4 w-4" />
               Add New User

@@ -50,12 +50,12 @@ const ProjectStatsCard: React.FC<ExtendedProjectCardProps> = ({
       {
         data: [stats.studentsCount, stats.shiftLeadersCount],
         backgroundColor: [
-          'rgba(0, 0, 0, 0.8)',
-          'rgba(255, 255, 255, 0.8)',
+          '#E68C3A',  // Changed from black
+          '#F4F2EF',  // Changed from white
         ],
         borderColor: [
-          'rgba(0, 0, 0, 1)',
-          'rgba(255, 255, 255, 1)',
+          '#E68C3A',  // Changed from black
+          '#F4F2EF',  // Changed from white
         ],
         borderWidth: 1,
       },
@@ -122,18 +122,22 @@ const ProjectStatsCard: React.FC<ExtendedProjectCardProps> = ({
               </div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-black mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#E68C3A] mr-2"></div>
                   <div>
                     <p className="text-12 font-semibold text-white">
-                      Students: {stats.studentsCount}
+                      Students:
+                      <br />
+                      {stats.studentsCount}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-white mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#F4F2EF] mr-2"></div>
                   <div>
                     <p className="text-12 font-semibold text-white">
-                      Leaders: {stats.shiftLeadersCount}
+                      Leaders:
+                      <br />
+                      {stats.shiftLeadersCount}
                     </p>
                   </div>
                 </div>

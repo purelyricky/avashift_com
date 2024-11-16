@@ -3,10 +3,12 @@ import { LogoHeader } from "./common/LogoHeader";
 
 interface StudentNoteEmailProps {
     adminName: string;
+    adminEmail: string;
     studentName: string;
     projectName: string;
     leaderName: string;
     note: string;
+    shiftDate: string;
   }
   
   export const StudentNoteEmail: React.FC<StudentNoteEmailProps> = ({
@@ -15,6 +17,7 @@ interface StudentNoteEmailProps {
     projectName,
     leaderName,
     note,
+    shiftDate,
   }) => (
     <table width="100%" cellPadding="0" cellSpacing="0" style={{ maxWidth: "600px", margin: "0 auto", fontFamily: "'Arial', sans-serif" }}>
       <LogoHeader />
@@ -59,6 +62,10 @@ interface StudentNoteEmailProps {
               <tr>
                 <td style={{ padding: "8px 0", color: "#64748b" }}>Shift Leader:</td>
                 <td style={{ padding: "8px 0", color: "#2b3481", fontWeight: "bold" }}>{leaderName}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: "8px 0", color: "#64748b" }}>Shift Date:</td>
+                <td style={{ padding: "8px 0", color: "#2b3481", fontWeight: "bold" }}>{shiftDate}</td>
               </tr>
             </table>
             <div style={{
