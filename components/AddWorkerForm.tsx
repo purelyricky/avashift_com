@@ -57,6 +57,10 @@ const AddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) => {
       setStatus('success');
       // Reset form after success
       form.reset();
+      // Add page reload after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500); // 1.5 second delay to show success message
     } catch (error) {
       console.error('Error adding worker:', error);
       setStatus('error');

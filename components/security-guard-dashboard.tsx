@@ -209,7 +209,7 @@ export default function SecurityGuardDashboard({
                 type="text"
                 value={digit}
                 onChange={(e) => handleCodeChange(index, e.target.value)}
-                className="w-14 h-12 text-center text-6xl border border-[#100C08] font-bold text-black"
+                className="w-14 h-12 text-center text-2xl border border-[#100C08] font-medium text-black"
                 maxLength={1}
               />
             ))}

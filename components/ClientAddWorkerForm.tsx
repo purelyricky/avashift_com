@@ -56,6 +56,9 @@ const ClientAddWorkerForm = ({ user, projects, onSubmit }: AddWorkerFormProps) =
       await onSubmit(values);
       setStatus('success');
       form.reset();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error('Error adding worker:', error);
       setStatus('error');

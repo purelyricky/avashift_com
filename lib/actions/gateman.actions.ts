@@ -186,25 +186,12 @@ export async function getUpcomingShifts(gatemanId: string): Promise<GatemanShift
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     tomorrowStart.setHours(0, 0, 0, 0);
 
-    // First get the shift assignments for this gateman
-    const assignments = await database.listDocuments(
-      process.env.APPWRITE_DATABASE_ID!,
-      process.env.APPWRITE_SHIFT_ASSIGNMENTS_COLLECTION_ID!,
-      [
-        Query.equal('gatemanId', [gatemanId]),
-        Query.equal('status', ['assigned', 'confirmed'])
-      ]
-    );
-
-    const assignedShiftIds = assignments.documents.map(assignment => assignment.shiftId);
-    if (assignedShiftIds.length === 0) return [];
-
-    // Then get the shifts that match these assignments
+    // Get shifts directly where this gateman is assigned
     const shifts = await database.listDocuments(
       process.env.APPWRITE_DATABASE_ID!,
       process.env.APPWRITE_SHIFTS_COLLECTION_ID!,
       [
-        Query.equal('shiftId', assignedShiftIds),
+        Query.equal('gatemanId', [gatemanId]),
         Query.greaterThanEqual('date', tomorrowStart.toISOString()),
         Query.equal('status', ['published'])
       ]
