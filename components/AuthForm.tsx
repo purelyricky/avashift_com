@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -40,6 +40,7 @@ const AuthForm = ({ type }: { type: string }) => {
     const [showRoleSelection, setShowRoleSelection] = useState(false);
     const [formData, setFormData] = useState<SignUpFormData | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isRedirecting, setIsRedirecting] = useState(false);
 
   const formSchema = authFormSchema(type);
 
@@ -66,6 +67,7 @@ const AuthForm = ({ type }: { type: string }) => {
         });
         
         if (userData && userData.role) {
+          setIsRedirecting(true);
           const dashboardPath = getDashboardPath(userData.role as UserRole);
           router.push(dashboardPath);
         } else {
@@ -107,116 +109,138 @@ const AuthForm = ({ type }: { type: string }) => {
     }
   };
 
+  useEffect(() => {
+    if (isRedirecting) {
+        document.body.classList.add('redirecting');
+    } else {
+        document.body.classList.remove('redirecting');
+    }
+    
+    return () => {
+        document.body.classList.remove('redirecting');
+    };
+  }, [isRedirecting]);
 
   return (
-    <section className="auth-form">
-      <header className='flex flex-col gap-5 md:gap-8'>
-        <Link href="/" className="cursor-pointer flex items-center gap-1">
-          <Image 
-            src="/icons/logo.svg"
-            width={40}
-            height={40}
-            alt="Ava Shift logo"
-          />
-          <h1 className="text-26 font-ibm-plex-serif font-bold text-black-1">Ava Shift</h1>
-        </Link>
+    <>
+      <section className="auth-form relative">
+        <header className='flex flex-col gap-5 md:gap-8'>
+          <Link href="/" className="cursor-pointer flex items-center gap-1">
+            <Image 
+              src="/icons/logo.svg"
+              width={40}
+              height={40}
+              alt="Ava Shift logo"
+            />
+            <h1 className="text-26 font-ibm-plex-serif font-bold text-black-1">Ava Shift</h1>
+          </Link>
 
-        <div className="flex flex-col gap-1 md:gap-3">
-          <h1 className="text-24 lg:text-36 font-semibold text-gray-900">
-            {showRoleSelection ? 'Choose Your Role' : type === 'sign-in' ? 'Sign In' : 'Sign Up'}
-          </h1>
-          <p className="text-16 font-normal text-gray-600">
-            {showRoleSelection ? 'Please select your role to continue' : 'Please enter your details'}
-          </p>
-          {error && (
-            <p className="text-14 text-red-500 mt-2">{error}</p>
-          )}
-        </div>
-      </header>
-
-      {showRoleSelection ? (
-        <div className="flex flex-col gap-4 mt-8">
-          {Object.entries(roleOptions).map(([key, { title, role }]) => (
-            <Button
-              key={key}
-              onClick={() => handleRoleSelect(role)}
-              disabled={loadingRole !== null} // Disable all buttons when any is loading
-              className={`form-btn w-full h-12 ${loadingRole === role ? 'opacity-80' : ''}`}
-            >
-              {loadingRole === role ? (
-                <>
-                  <Loader2 size={20} className="animate-spin mr-2" />
-                  Loading...
-                </>
-              ) : title}
-            </Button>
-          ))}
-        </div>
-      ) : (
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleInitialSubmit)} className="space-y-8">
-            {type === 'sign-up' && (
-              <>
-                <div className="flex gap-4">
-                  <CustomInput 
-                    control={form.control}
-                    name="firstName"
-                    label="First Name"
-                    placeholder="Enter your first name"
-                  />
-                  <CustomInput
-                    control={form.control}
-                    name="lastName"
-                    label="Last Name"
-                    placeholder="Enter your last name"
-                  />
-                </div>
-                <CustomInput
-                  control={form.control}
-                  name="phone"
-                  label="Phone Number"
-                  placeholder="Enter your phone number"
-                />
-              </>
+          <div className="flex flex-col gap-1 md:gap-3">
+            <h1 className="text-24 lg:text-36 font-semibold text-gray-900">
+              {showRoleSelection ? 'Choose Your Role' : type === 'sign-in' ? 'Sign In' : 'Sign Up'}
+            </h1>
+            <p className="text-16 font-normal text-gray-600">
+              {showRoleSelection ? 'Please select your role to continue' : 'Please enter your details'}
+            </p>
+            {error && (
+              <p className="text-14 text-red-500 mt-2">{error}</p>
             )}
+          </div>
+        </header>
 
-            <CustomInput
-              control={form.control}
-              name="email"
-              label="Email"
-              placeholder="Enter your email"
-            />
-
-            <CustomInput
-              control={form.control}
-              name="password"
-              label="Password"
-              placeholder="Enter your password"
-            />
-
-            <div className="flex flex-col gap-4">
-              <Button type="submit" disabled={isLoading} className="form-btn">
-                {isLoading ? (
+        {showRoleSelection ? (
+          <div className="flex flex-col gap-4 mt-8">
+            {Object.entries(roleOptions).map(([key, { title, role }]) => (
+              <Button
+                key={key}
+                onClick={() => handleRoleSelect(role)}
+                disabled={loadingRole !== null} // Disable all buttons when any is loading
+                className={`form-btn w-full h-12 ${loadingRole === role ? 'opacity-80' : ''}`}
+              >
+                {loadingRole === role ? (
                   <>
-                    <Loader2 size={20} className="animate-spin" /> &nbsp;
+                    <Loader2 size={20} className="animate-spin mr-2" />
                     Loading...
                   </>
-                ) : type === 'sign-in' ? 'Sign In' : 'Continue'}
+                ) : title}
               </Button>
-            </div>
-          </form>
-        </Form>
-      )}
+            ))}
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleInitialSubmit)} className="space-y-8">
+              {type === 'sign-up' && (
+                <>
+                  <div className="flex gap-4">
+                    <CustomInput 
+                      control={form.control}
+                      name="firstName"
+                      label="First Name"
+                      placeholder="Enter your first name"
+                    />
+                    <CustomInput
+                      control={form.control}
+                      name="lastName"
+                      label="Last Name"
+                      placeholder="Enter your last name"
+                    />
+                  </div>
+                  <CustomInput
+                    control={form.control}
+                    name="phone"
+                    label="Phone Number"
+                    placeholder="Enter your phone number"
+                  />
+                </>
+              )}
 
-      <footer className="flex justify-center gap-1 mt-6">
-        <p className="text-14 font-normal text-gray-600">
-          {type === 'sign-in' ? "Don't have an account?" : "Already have an account?"}
-        </p>
-        <Link href={type === 'sign-in' ? '/sign-up' : '/sign-in'} className="form-link">
-          {type === 'sign-in' ? 'Sign up' : 'Sign in'}
-        </Link>
-      </footer>
-    </section>
+              <CustomInput
+                control={form.control}
+                name="email"
+                label="Email"
+                placeholder="Enter your email"
+              />
+
+              <CustomInput
+                control={form.control}
+                name="password"
+                label="Password"
+                placeholder="Enter your password"
+              />
+
+              <div className="flex flex-col gap-4">
+                <Button type="submit" disabled={isLoading} className="form-btn">
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" /> &nbsp;
+                      Loading...
+                    </>
+                  ) : type === 'sign-in' ? 'Sign In' : 'Continue'}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
+
+        <footer className="flex justify-center gap-1 mt-6">
+          <p className="text-14 font-normal text-gray-600">
+            {type === 'sign-in' ? "Don't have an account?" : "Already have an account?"}
+          </p>
+          <Link href={type === 'sign-in' ? '/sign-up' : '/sign-in'} className="form-link">
+            {type === 'sign-in' ? 'Sign up' : 'Sign in'}
+          </Link>
+        </footer>
+      </section>
+
+      {isRedirecting && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-lg font-medium">Redirecting to dashboard...</p>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
