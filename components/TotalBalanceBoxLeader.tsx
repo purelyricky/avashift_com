@@ -54,7 +54,7 @@ const TotalBalanceBoxLeader = ({ leaderStats }: { leaderStats: LeaderStats }) =>
         />
         <StatCardLeader
           type="ratings"
-          value={(leaderStats.averageRatings.punctuality + leaderStats.averageRatings.overall) / 2}
+          value={5.0}
           label="Átlagos értékelés"
         />
         <StatCardLeader

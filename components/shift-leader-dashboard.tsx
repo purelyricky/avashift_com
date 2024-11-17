@@ -418,48 +418,49 @@ export default function ShiftLeaderDashboard({
                         />
                       </div>
                       <div className="flex space-x-2 mt-1">
-                        {["present", "late", "absent"].map((status) => (
+                        {[
+                          { en: "present", hu: "Jelen" },
+                          { en: "late", hu: "Késő" },
+                          { en: "absent", hu: "Hiányzó" }
+                        ].map(({ en, hu }) => (
                           <Button
-                            key={status}
+                            key={en}
                             size="sm"
                             variant="outline"
                             onClick={() =>
                               handleAttendance(
                                 student.id,
-                                status as "present" | "late" | "absent"
+                                en as "present" | "late" | "absent"
                               )
                             }
                             className={cn(
                               "text-xs py-1 h-6",
                               // If there are pending changes for this student, show those colors
-                              pendingChanges.attendance[student.id] ===
-                                "present" &&
-                                status === "present" &&
+                              pendingChanges.attendance[student.id] === "present" &&
+                                en === "present" &&
                                 "bg-green-500 hover:bg-green-600",
-                              pendingChanges.attendance[student.id] ===
-                                "late" &&
-                                status === "late" &&
+                              pendingChanges.attendance[student.id] === "late" &&
+                                en === "late" &&
                                 "bg-yellow-500 hover:bg-yellow-600",
-                              pendingChanges.attendance[student.id] ===
-                                "absent" &&
-                                status === "absent" &&
+                              pendingChanges.attendance[student.id] === "absent" &&
+                                en === "absent" &&
                                 "bg-red-500 hover:bg-red-600",
                               // If no pending changes, show colors based on database status
                               !pendingChanges.attendance[student.id] &&
                                 student.attendance === "present" &&
-                                status === "present" &&
+                                en === "present" &&
                                 "bg-green-500 hover:bg-green-600",
                               !pendingChanges.attendance[student.id] &&
                                 student.attendance === "late" &&
-                                status === "late" &&
+                                en === "late" &&
                                 "bg-yellow-500 hover:bg-yellow-600",
                               !pendingChanges.attendance[student.id] &&
                                 student.attendance === "absent" &&
-                                status === "absent" &&
+                                en === "absent" &&
                                 "bg-red-500 hover:bg-red-600"
                             )}
                           >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                            {hu}
                           </Button>
                         ))}
                       </div>

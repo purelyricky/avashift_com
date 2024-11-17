@@ -187,14 +187,14 @@ export default function ProjectMembersTable({
     try {
       const result = await markFeedbackAsRead(note.id);
       if (result.success) {
+        // Update members state to remove the read note
         setMembers(
           members.map((member) => {
             if (member.documentId === selectedMemberNotes?.documentId) {
               return {
                 ...member,
-                notes: member.notes.map((n: Note) =>
-                  n.id === note.id ? { ...n, isRead: true } : n
-                ),
+                // Filter out the read note
+                notes: member.notes.filter((n: Note) => n.id !== note.id),
                 totalNotes: member.notes.filter(
                   (n: Note) => !n.isRead && n.id !== note.id
                 ).length,
@@ -204,12 +204,12 @@ export default function ProjectMembersTable({
           })
         );
 
+        // Update selectedMemberNotes to remove the read note
         if (selectedMemberNotes) {
           setSelectedMemberNotes({
             ...selectedMemberNotes,
-            notes: selectedMemberNotes.notes.map((n: Note) =>
-              n.id === note.id ? { ...n, isRead: true } : n
-            ),
+            // Filter out the read note
+            notes: selectedMemberNotes.notes.filter((n: Note) => n.id !== note.id),
             totalNotes: selectedMemberNotes.notes.filter(
               (n: Note) => !n.isRead && n.id !== note.id
             ).length,
